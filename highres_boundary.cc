@@ -34,6 +34,7 @@ nacb::Imagef HighresBoundary(const nacb::Image8& image, const int factor) {
     }
   }
   smoothed.write("/tmp/smoothed.png");
+  return smoothed;
   (smoothed > 0.5).write("/tmp/smoothed_thresh.png");
 
   nacb::Image8 mask(smoothed.w, smoothed.h, 1);
