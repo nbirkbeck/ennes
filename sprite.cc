@@ -4,31 +4,28 @@
 #include <vector>
 #include <queue>
 #include <string>
-
+#include <nmath/vec3.h>
 #include "render_utils.h"
+#include "extract_colors.h"
 
 namespace {
 bool SharesCommonBoundary(const nacb::Image8& im1,
                           const nacb::Image8& im2,
+                          const nacb::Vec3<int>& bg_color,
                           int x1, int y1,
                           int x2, int y2) {
   const nacb::Image8* ims[2] = {&im1, &im2};
   std::set<int> colors[2];
   for (int j = 0; j < 2; ++j) {
-    for (int y = 0; y < ims[j]->h; ++y) {
-      for (int x = 0; x < ims[j]->w; ++x) {
-        int c = (int(ims[j]->get(x, y, 0)) << 16) +
-          (int(ims[j]->get(x, y, 1)) << 8) +
-          (int(ims[j]->get(x, y, 2)));
-        colors[j].insert(c);
-      }
-    }
+    colors[j] = GetUniqueColors(*ims[j]);
   }
   int cnt = 0;
   for (int c : colors[0]) {
     cnt += colors[1].count(c);
   }
-  return cnt >= 3;
+  if (cnt < 3) {
+    return false;
+  }
   
   int high = 1;
   int coord = 0;
@@ -41,20 +38,27 @@ bool SharesCommonBoundary(const nacb::Image8& im1,
     coord = 1;
     high = 0;
   }
-  int num_good = 0;
-  int num_bad = 0;
+  //int num_good = 0;
+  //int num_bad = 0;
+  // Check that the silhouette edges between the two sprites mostly overlap.
+  int num_bg_equal = 0;
   for (int k = 0; k < 8; ++k) {
     double d2 = 0;
+    nacb::Vec3<int> c1, c2;
     for (int c = 0; c < 3; ++c) {
-      float d = float(ims[!high]->get(coord == 0 ? 7 : k, coord == 1 ? 7 : k, c)) -
-        float(ims[high]->get(coord == 0 ? 0 : k, coord == 1 ? 0 : k, c));
-      d2 += d*d;
+      c1[c] = float(ims[!high]->get(coord == 0 ? 7 : k, coord == 1 ? 7 : k, c));
+      c2[c] = float(ims[high]->get(coord == 0 ? 0 : k, coord == 1 ? 0 : k, c));
+      //float d = float(ims[!high]->get(coord == 0 ? 7 : k, coord == 1 ? 7 : k, c)) -
+      //  float(ims[high]->get(coord == 0 ? 0 : k, coord == 1 ? 0 : k, c));
+      //d2 += d*d;
     }
-    num_good += (sqrt(d2) <= 1);
-    num_bad += ims[!high]->get(coord == 0 ? 7 : k, coord == 1 ? 7 : k, 3) == 0;
+    num_bg_equal += (c1 == bg_color) == (c2 == bg_color);
+    //num_good += (sqrt(d2) <= 1);
+    //num_bad += ims[!high]->get(coord == 0 ? 7 : k, coord == 1 ? 7 : k, 3) == 0;
   }
-  if (num_bad >= 7) return false;
-  return num_good >= 3;
+  return num_bg_equal > 4;
+  //if (num_bad >= 7) return false;
+  //return num_good >= 3;
 }
 
 void GetSpriteImages(const Sprite* sprites,
@@ -82,6 +86,7 @@ void GetSpriteImages(const Sprite* sprites,
 
 std::vector<std::vector<int> >
 FindConnectedSprites(const Sprite* sprites,
+                     const nacb::Vec3<int>& bg_color,
                      const std::vector<nacb::Image8>& sprite_images,
                      const std::unordered_map<int, int>& sprite_pos) {
   std::unordered_map<int, int> sprite_group_index;
@@ -113,8 +118,9 @@ FindConnectedSprites(const Sprite* sprites,
         if (sprite_pos.count(neigh_index) &&
             !sprite_group_index.count(neigh_index) &&
             SharesCommonBoundary(sprite_images[sprite_pos.find(index)->second],
-                                sprite_images[sprite_pos.find(neigh_index)->second],
-                                x, y, nx, ny)) {
+                                 sprite_images[sprite_pos.find(neigh_index)->second],
+                                 bg_color,
+                                 x, y, nx, ny)) {
           q.push(neigh_index);
           sprite_group_index[neigh_index] = sprite_groups.size();
         }
@@ -131,9 +137,12 @@ GroupSprites(const Sprite* sprites, const nes::RenderState& render_state) {
   std::unordered_map<int, int> sprite_pos;
   std::vector<nacb::Image8> sprite_images;
 
+  nacb::Vec3<int> bg_color(kNesPalette[render_state.image_palette()[0]][0],
+                           kNesPalette[render_state.image_palette()[0]][1],
+                           kNesPalette[render_state.image_palette()[0]][2]);
   GetSpriteImages(sprites, render_state, &sprite_images, &sprite_pos);
   std::vector<std::vector<int> > sprite_groups =
-    FindConnectedSprites(sprites, sprite_images, sprite_pos);
+    FindConnectedSprites(sprites, bg_color, sprite_images, sprite_pos);
 
   std::cout << "Num active sprites: " << sprite_pos.size() 
             << " num groups: " << sprite_groups.size()

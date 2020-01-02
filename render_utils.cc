@@ -1,4 +1,5 @@
 #include "render_utils.h"
+#include "sprite.h"
 
 #include <string>
 #include <nimage/image.h>
@@ -48,3 +49,57 @@ void ClearImage(nacb::Image8& image, const uint8_t color[3]) {
   }
 }
 
+void RenderSprites(const nes::RenderState& render_state, int x_offset,
+                   bool foreground,
+                   nacb::Image8* image_ptr) {
+  nacb::Image8& image = *image_ptr;
+  Sprite* sprites = (Sprite*)render_state.sprite_data().c_str();
+  for (int i = 0; i < kNumSprites; ++i) {
+    if (sprites[i].IsActive() &&
+        (sprites[i].IsForeground() == foreground)) {
+      DrawPattern(image, sprites[i].x + x_offset, sprites[i].y(),
+                  render_state.sprite_palette(),
+                  render_state.pattern_table(render_state.ppu().sprite_pattern_table()),
+                  sprites[i].pattern, sprites[i].HighColorBits(), sprites[i].GetTransformFlags());
+    }
+  }
+}
+
+int RenderBackground(const nes::RenderSequence::FrameState& frame_state,
+                      int x_offset, nacb::Image8* image_ptr) {
+  nacb::Image8& image = *image_ptr;
+  nes::RenderState render_state = frame_state.start_frame();
+  const nes::RenderState* current_state = &render_state;
+  int next_update_index = 0;
+
+  for (int y = 0; y < kNesHeight; y += 8) {
+    if (next_update_index < frame_state.state_update_size() &&
+        y + 4 >= frame_state.state_update(next_update_index).ppu().scan_line()) {
+      current_state = &frame_state.state_update(next_update_index);
+      next_update_index++;
+    }
+
+    // Currently only supports horizontal scrolling
+    {
+      const std::string& name_table =  render_state.name_table(current_state->ppu().name_table());
+      for (int x = 8 * (current_state->ppu().vscroll() / 8); x < kNesWidth; x += 8) {
+        const int high_color_bits = GetAttributeColor(name_table, x, y);
+        DrawPattern(image, x - current_state->ppu().vscroll() + x_offset, y,
+                    render_state.image_palette(),
+                    render_state.pattern_table(current_state->ppu().screen_pattern_table()),
+                    name_table[(y >> 3) * (kNesWidth >> 3) + (x >> 3)], high_color_bits);
+      }
+    }
+    {
+      const std::string& name_table =  render_state.name_table((current_state->ppu().name_table() + 1) % 4);
+      for (int x = 0; x <= 8 * (current_state->ppu().vscroll() / 8); x += 8) {
+        const int high_color_bits = GetAttributeColor(name_table, x, y);
+        DrawPattern(image, (x - current_state->ppu().vscroll()) + kNesWidth + x_offset, y,
+                    render_state.image_palette(),
+                    render_state.pattern_table(current_state->ppu().screen_pattern_table()),
+                    name_table[(y >> 3) * (kNesWidth >> 3) + (x >> 3)], high_color_bits);
+      }
+    }
+  }
+  return current_state->ppu().vscroll() % 8;
+}
