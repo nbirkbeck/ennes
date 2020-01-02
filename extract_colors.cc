@@ -8,9 +8,14 @@ namespace {
 int ColorIndex(uint8_t r, uint8_t g, uint8_t b) {
   return (int(r) << 16) | (int(g) << 8) | int(b);
 }
+
+nacb::Vec3f IndexToColor(int color) {
+  return nacb::Vec3f(float((color >> 16) & 0xFF) / 255.0f,
+                     float((color >> 8) & 0xFF) / 255.0f,
+                     float(color & 0xFF) / 255.0f);
 }
 
-std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::Image8& image) {
+std::set<int> GetUniqueColors(const nacb::Image8& image) {
   std::set<int> colors;
   for (int y = 0; y < image.h; ++y) {
     for (int x = 0; x < image.w; ++x) {
@@ -20,9 +25,14 @@ std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::
       }
     }
   }
-  printf("Number of colors: %d\n", colors.size());
+  return colors;
+}
+}
 
+std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::Image8& image) {
+  std::set<int> colors = GetUniqueColors(image);
   std::vector<std::pair<nacb::Vec3f, nacb::Image8>> color_images;
+  
   for (const auto& color: colors) {
     nacb::Image8 mask(image.w, image.h, 3);
     mask = 0;
@@ -32,12 +42,27 @@ std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::
         mask(x, y, 0) = mask(x, y, 1) = mask(x, y, 2) = on;
       }
     }
-    nacb::Vec3f color_vec(float((color >> 16) & 0xFF) / 255.0f,
-                          float((color >> 8) & 0xFF) / 255.0f,
-                          float(color & 0xFF) / 255.0f);
-    color_images.push_back(std::make_pair(color_vec, mask));
+    color_images.push_back(std::make_pair(IndexToColor(color), mask));
   }
   return color_images;
+}
+
+std::pair<nacb::Image8, std::vector<nacb::Vec3f> >
+PalettizeImage(const nacb::Image8& image) {
+  std::set<int> unique_colors = GetUniqueColors(image);
+  std::unordered_map<int, int> color_index;
+  std::vector<nacb::Vec3f> colors;
+  for (int c : unique_colors) {
+    color_index[c] = colors.size();
+    colors.push_back(IndexToColor(c));
+  }
+  nacb::Image8 indexed_image(image.w, image.h, 1);
+  for (int y = 0; y < image.h; ++y) {
+    for (int x = 0; x < image.w; ++x) {
+      indexed_image(x, y, 0) = color_index[ColorIndex(image(x, y, 0), image(x, y, 1), image(x, y, 2))];
+    }
+  }
+  return std::make_pair(indexed_image, colors);
 }
 
 #ifdef EXTRACT_COLORS_MAIN
@@ -49,10 +74,10 @@ int main(int ac, char* av[]) {
     return -1;
   }
   int output_index =  0;
-  for (const auto& color_image : ExtractColorMasks(image)) {
+  for (auto& color_image : ExtractColorMasks(image)) {
     char output[1024];
     snprintf(output, sizeof(output), av[2], output_index);
-    mask.write(output);
+    color_image.second.write(output);
     output_index++;    
   }
   return 0;
