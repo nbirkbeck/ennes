@@ -13,7 +13,7 @@ proto/render_state.pb.cc: render_state.proto
 	protoc render_state.proto --cpp_out proto
 
 highres_boundary: highres_boundary.cc extract_colors.o
-	g++ ${LIBS} highres_boundary.cc extract_colors.o -o highres_boundary
+	g++ -DHIGHRES_BOUNDARY_MAIN ${LIBS} highres_boundary.cc extract_colors.o -o highres_boundary
 
 SIMPLE_RENDER_OBJS = simple_renderer.o proto/render_state.pb.o render_utils.o sprite.o 
 simple_renderer: ${SIMPLE_RENDER_OBJS}
