@@ -1,32 +1,42 @@
+#include "extract_colors.h"
+
 #include <nimage/image.h>
 #include <nmath/vec3.h>
 #include <unordered_map>
 #include <stdint.h>
-#include <set>
 
 namespace {
-int ColorIndex(uint8_t r, uint8_t g, uint8_t b) {
-  return (int(r) << 16) | (int(g) << 8) | int(b);
-}
-
 nacb::Vec3f IndexToColor(int color) {
   return nacb::Vec3f(float((color >> 16) & 0xFF) / 255.0f,
                      float((color >> 8) & 0xFF) / 255.0f,
                      float(color & 0xFF) / 255.0f);
 }
+}
 
-std::set<int> GetUniqueColors(const nacb::Image8& image) {
+int NumOverlappingColors(const std::set<int>& s1,
+                         const std::set<int>& s2) {
+  
+  int cnt = 0;
+  for (int c : s1) {
+    cnt += s2.count(c);
+  }
+  return cnt;
+  std::vector<int> output;
+  std::set_intersection(s1.begin(), s1.end(), s2.begin(), s2.end(), std::back_inserter(output));
+  return output.size();
+}
+
+std::set<int> GetUniqueColors(const nacb::Image8& image,
+                              int x0, int y0, int w, int h) {
   std::set<int> colors;
-  for (int y = 0; y < image.h; ++y) {
-    for (int x = 0; x < image.w; ++x) {
-      int color = ColorIndex(image(x, y, 0), image(x, y, 1), image(x, y, 2));
-      if (colors.count(color) == 0) {
-        colors.insert(color);
-      }
+  if (w < 0) w = image.w;
+  if (h < 0) h = image.h;
+  for (int y = y0; y < y0 + h; ++y) {
+    for (int x = x0; x < x0 + w; ++x) {
+      colors.insert(ColorIndex(image(x, y, 0), image(x, y, 1), image(x, y, 2)));
     }
   }
   return colors;
-}
 }
 
 std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::Image8& image) {

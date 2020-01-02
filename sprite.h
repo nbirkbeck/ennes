@@ -24,7 +24,10 @@ public:
   const int y() const {
     return y_minus_1 + 1;
   }
-  
+
+  bool IsForeground() const {
+    return !((att >> 5) & 0x1);
+  }
   uint8_t y_minus_1;
   uint8_t pattern;
   uint8_t att; // upper_color:2, below_background:bit5

@@ -1,6 +1,7 @@
 #include "proto/render_state.pb.h"
 
 #include "nes.h"
+#include "extract_colors.h"
 #include "render_utils.h"
 #include "sprite.h"
 
@@ -23,61 +24,142 @@ public:
    std::unordered_map<std::string, nacb::Image8> database_;
 } sprite_database;
 
+/*
+template <class T>
+class ImageView {
+  ImageView(nacb::Image<T>* source, int x0, int y0) : source_(source), x0_(x0), y0_(y0) {
+  }
+  T& operator()(int x, int y, int c) {
+    return source(x + x0_, y + y0_, c);
+  }
+  int x0_;
+  int y0_;
+  nacb::Image<T>* source_;
+};
+*/
+void FindWalkingSurfaces(nacb::Image8* image, const uint8_t bg[3], int x0) {
+  nacb::Imagef grads[3] = {nacb::Imagef(1,1,1),
+                           nacb::Imagef(1,1,1),
+                           nacb::Imagef(1,1,1)};
+  for (int c = 0; c < 3; ++c) {
+    grads[c] = image->gradient(c);
+  }
+  nacb::Imagef g2 = (grads[0] * grads[0]) + (grads[1] * grads[1]) + (grads[2] * grads[2]);
+  nacb::Image8 mask(kNesWidth / 8, kNesHeight / 8, 1);
+  mask = 0;
+
+  for (int by = 1; by < kNesHeight / 8; ++by) {
+    for (int bx = 0; bx < kNesWidth / 8; ++bx) {
+      int num_grad = 0;
+      for (int x = 0; x < 8; ++x) {
+        double g = g2(bx * 8 + x + x0, by * 8, 1) +
+          g2(bx * 8 + x + x0, by * 8 - 1, 1);
+        num_grad += (g > 60);
+      }
+      if (num_grad >= 6) {
+        int num_set = 0;
+        for (int x = 0; x < 8; ++x) {
+          if (image->get(bx * 8 + x + x0, by * 8, 0) == bg[0] &&
+              image->get(bx * 8 + x + x0, by * 8, 1) == bg[1] &&
+              image->get(bx * 8 + x + x0, by * 8, 2) == bg[2]) {
+            continue;
+          }
+              
+          // (*image)(bx * 8 + x + x0, by * 8, 0) = 0;
+          // (*image)(bx * 8 + x + x0, by * 8, 1) = 255;
+          // (*image)(bx * 8 + x + x0, by * 8, 2) = 0;
+          num_set++;
+        }
+        if (num_set >= 6) {
+          mask(bx, by, 0) = 1;
+        }
+      }
+    }
+  }
+  // For each candidate block, find connected neighbors.
+  std::set<int> visited;
+  std::vector<std::vector<std::pair<int, int>>> groups;
+  for (int by = 0; by < kNesHeight / 8; by++) {
+    for (int bx = 0; bx < kNesWidth / 8; bx++) {
+      if (mask(bx, by) == 1) {
+        std::set<int> colors = GetUniqueColors(*image, bx * 8 + x0, by *8, 8, 8);
+        auto it = colors.find(ColorIndex(bg[0], bg[1], bg[2]));
+        if (it != colors.end()) {
+          colors.erase(it);
+        }
+        
+        std::queue<std::pair<int, int>> q;
+        q.push(std::make_pair(bx, by));
+        
+        mask(bx, by) = 2;
+        
+
+        std::vector<std::pair<int, int>> group;
+        while (!q.empty()) {
+          auto block = q.front();
+          q.pop();
+          group.push_back(block);
+          std::set<int> cur_colors = GetUniqueColors(*image, block.first * 8 + x0, block.second *8, 8, 8);
+          
+          int neigh[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+          for (int k = 0; k < 4; ++k) {
+            const int nx = block.first + neigh[k][0];
+            const int ny = block.second + neigh[k][1];
+            if (!(nx >= 0 && ny >= 0 && nx < kNesWidth / 8 && ny < kNesHeight / 8)) continue;
+            if (mask(nx, ny) == 2) continue;
+            //if (mask(nx, ny) != 1) continue;
+
+            std::set<int> neigh_colors = GetUniqueColors(*image, nx*8 + x0, ny*8, 8, 8);
+            int num_shared1 = NumOverlappingColors(colors, neigh_colors);
+            int num_shared2 = NumOverlappingColors(cur_colors, neigh_colors);
+                                                   
+            //            std::cout << "Overlapping:" << colors.size() << " " << num_shared << std::endl;
+            if (num_shared1 >= 3 || num_shared2 >= 3 ||
+                (num_shared1 == cur_colors.size()) ||
+                (neigh_colors.size() == 1 && num_shared1 == 1)) {
+              mask(nx, ny) = 2;
+              q.push(std::make_pair(nx, ny));
+            }
+          }
+        }
+        groups.push_back(group);
+      }
+    }
+  }
+  std::cout << "Num groups:" << groups.size() << std::endl;
+  for (const auto& g : groups) {
+    std::cout << " " << g.size() << std::endl;
+    if (g.size() >= 1) {
+      for (auto& b : g) {
+        for (int y = 0; y < 8; ++y) {
+          for (int x = 0; x < 8; ++x) {
+            (*image)(x + b.first*8 + x0, y + b.second*8, 0) /= 4;
+            (*image)(x + b.first*8 + x0, y + b.second*8, 0) += 192;
+            (*image)(x + b.first*8 + x0, y + b.second*8, 1) /= 2;
+            (*image)(x + b.first*8 + x0, y + b.second*8, 2) /= 2;
+          }
+        }
+      }
+    }
+  }
+}
 
 nacb::Image8 RenderFrame(const nes::RenderSequence::FrameState& frame_state) {
-  nacb::Image8 image(kNesWidth, kNesHeight, 3);
   nes::RenderState render_state = frame_state.start_frame();
 
+  const bool kBlockAligned = true;
+  nacb::Image8 image(kNesWidth + (kBlockAligned ? 8: 0), kNesHeight, 3);
   ClearImage(image, kNesPalette[render_state.image_palette()[0]]);
 
   // FIXME: This is a hack for SMB1.
   render_state.mutable_ppu()->set_name_table(0);
 
-  // TODO: Render background sprites
-  
-  int next_update_index = 0;
-  const nes::RenderState* current_state = &render_state;
-  for (int y = 0; y < kNesHeight; y += 8) {
-    if (next_update_index < frame_state.state_update_size() &&
-        y + 4 >= frame_state.state_update(next_update_index).ppu().scan_line()) {
-      current_state = &frame_state.state_update(next_update_index);
-      next_update_index++;
-    }
+  RenderSprites(render_state, kBlockAligned ? 8 : 0, /*foreground=*/false, &image);
+  int vscroll_mod8 = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
+  FindWalkingSurfaces(&image,  kNesPalette[render_state.image_palette()[0]], 8 - vscroll_mod8);
+  RenderSprites(render_state, kBlockAligned ? 8 : 0, /*foreground=*/true, &image);
 
-    // Currently only supports horizontal scrolling
-    {
-      const std::string& name_table =  render_state.name_table(current_state->ppu().name_table());
-      for (int x = 8 * (current_state->ppu().vscroll() / 8); x < kNesWidth; x += 8) {
-        const int high_color_bits = GetAttributeColor(name_table, x, y);
-        DrawPattern(image, x - current_state->ppu().vscroll(), y,
-                    render_state.image_palette(),
-                    render_state.pattern_table(current_state->ppu().screen_pattern_table()),
-                    name_table[(y >> 3) * (kNesWidth >> 3) + (x >> 3)], high_color_bits);
-      }
-    }
-    {
-      const std::string& name_table =  render_state.name_table((current_state->ppu().name_table() + 1) % 4);
-      for (int x = 0; x <= 8 * (current_state->ppu().vscroll() / 8); x += 8) {
-        const int high_color_bits = GetAttributeColor(name_table, x, y);
-        DrawPattern(image, (x - current_state->ppu().vscroll()) + kNesWidth, y,
-                    render_state.image_palette(),
-                    render_state.pattern_table(current_state->ppu().screen_pattern_table()),
-                    name_table[(y >> 3) * (kNesWidth >> 3) + (x >> 3)], high_color_bits);
-      }
-    }
-  }
-
-  // Render the foreground sprites
-  Sprite* sprites = (Sprite*)render_state.sprite_data().c_str();
-  for (int i = 0; i < kNumSprites; ++i) {
-    if (sprites[i].IsActive()) {
-      DrawPattern(image, sprites[i].x, sprites[i].y(),
-                  render_state.sprite_palette(),
-                  render_state.pattern_table(render_state.ppu().sprite_pattern_table()),
-                  sprites[i].pattern, sprites[i].HighColorBits(), sprites[i].GetTransformFlags());
-    }
-  }
-
+  Sprite* sprites = (Sprite*)render_state.sprite_data().c_str();                
   std::vector<SpriteGroup> groups = GroupSprites(sprites, render_state);
   for (auto& sprite_group : groups) {
     if (!sprite_database.Exists(sprite_group.image)) {
@@ -104,12 +186,12 @@ int main(int ac, char* av[]) {
   }
   
   fseek(file, 0, SEEK_END);
-  int size = ftell(file);
+  const int size = ftell(file);
   fseek(file, 0, SEEK_SET);
-  std::cout << "Size:" << size << std::endl;
   
   std::string bytes(size, 0);
   fread(&bytes[0], size, 1, file);
+  fclose(file);
   seq.ParseFromString(bytes);
   std::cout << "Num frames:" <<  seq.frame_state_size() << std::endl;
 
