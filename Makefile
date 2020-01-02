@@ -15,8 +15,9 @@ proto/render_state.pb.cc: render_state.proto
 highres_boundary: highres_boundary.cc extract_colors.o
 	g++ ${LIBS} highres_boundary.cc extract_colors.o -o highres_boundary
 
-simple_renderer: simple_renderer.cc proto/render_state.pb.o
-	g++ -O3 ${LIBS} proto/render_state.pb.o simple_renderer.cc -o simple_renderer 
+SIMPLE_RENDER_OBJS = simple_renderer.o proto/render_state.pb.o render_utils.o sprite.o 
+simple_renderer: ${SIMPLE_RENDER_OBJS}
+	g++ -O3 ${LIBS} ${SIMPLE_RENDER_OBJS} -o simple_renderer 
 
 render_dump.so: render_dump.o proto/render_state.pb.o
 	g++ render_dump.o proto/render_state.pb.o ${LIBS} -fPIC -shared -o $@
