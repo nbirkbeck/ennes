@@ -154,7 +154,6 @@ GroupSprites(const Sprite* sprites, const nes::RenderState& render_state) {
     int max_x = 0;
     int max_y = 0;
     for (int j : sprite_groups[i]) {
-      std::cout << " " << j << "(" << int(sprites[j].x) << "," << sprites[j].y() << ")";
       min_x = std::min(min_x, int(sprites[j].x));
       max_x = std::max(max_x, int(sprites[j].x));
 
@@ -163,6 +162,9 @@ GroupSprites(const Sprite* sprites, const nes::RenderState& render_state) {
     }
     std::cout << std::endl;
     nacb::Image8 group_sprite(max_x + 8 - min_x, max_y + 8 - min_y, 3);
+
+    ClearImage(group_sprite, kNesPalette[render_state.image_palette()[0]]);
+
     for (int j : sprite_groups[i]) {
       for (int y = 0; y < sprite_images[j].h; ++y) {
         for (int x = 0; x < sprite_images[j].w; ++x) {
@@ -172,7 +174,7 @@ GroupSprites(const Sprite* sprites, const nes::RenderState& render_state) {
         }
       }
     }
-    output.push_back({sprite_groups[i], group_sprite});
+    output.push_back({min_x, min_y, sprite_groups[i], group_sprite});
   }
   return output;
 }

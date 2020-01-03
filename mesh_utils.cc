@@ -12,6 +12,7 @@ nacb::Image8 GetMask(const nacb::Image8& image,
                      const nacb::Vec3<int>& bg_color,
                      int num_pad = 0) {
   nacb::Image8 mask(image.w + 2 * num_pad, image.h + 2 * num_pad, 1);
+  mask = 0;
   for (int y = 0; y < image.h; ++y) {
     for (int x = 0; x < image.w; ++x) {
       mask(num_pad + x, num_pad + y, 0) =
@@ -111,8 +112,8 @@ struct blowup_options_t {
   int ninner; // Number of inner iterations (to reduce strain/stretch).
 
   blowup_options_t() {
-    ntime = 50;
-    alpha = 0.05;
+    ntime = 30;
+    alpha = 0.1;
     beta = 1.0;
     ninner = 15;
   }
@@ -128,7 +129,6 @@ nappear::Mesh BlowUpMesh(const nappear::Mesh& mesh,
   std::vector<std::map<int, double>> vneigh = GetVertexNeighbors(mesh);
 
   for (int t=0; t < opts.ntime; t++) {
-    printf("Doing iteration: %d\n", t);
     result.initNormals();
 
     // Move along normals
@@ -176,37 +176,50 @@ nappear::Mesh BlowUpMesh(const nappear::Mesh& mesh,
   return result;
 }
 
+bool AllWhite(const nacb::Image8& image) {
+  for (int y = 0; y <image.h;++y) {
+    for (int x = 0; x< image.w; ++x) {
+      if (!image(x, y, 0)) return false;
+    }
+  }
+  return true;
+}
 
-int main(int ac, char* av[]) {
-  nacb::Image8 lowres_image;
-  nacb::Image8 highres_image;
-
-  lowres_image.read(av[1]);
-  highres_image.read(av[2]);
-
-  nacb::Vec3<int> bg_color(lowres_image(0, 0, 0),
-                           lowres_image(0, 0, 1),
-                           lowres_image(0, 0, 2));
+nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
+                                   const nacb::Image8& highres_image,
+                                   const nacb::Vec3<int>& bg_color) {
   const int num_pad_highres = 1;
+    
   nacb::Image8 lowres_mask = GetMask(lowres_image, bg_color);
   nacb::Imagef highres_mask = GetMask(highres_image, bg_color, num_pad_highres);
-    
   const int factor = highres_image.w / lowres_mask.w;
-  FullLevelSet2D levelset(highres_mask, 1.0, 1.0);
-  highres_mask.write("/tmp/hr.png");
+
   std::vector<nacb::Vec2d> points;
   std::vector<std::pair<int, int> > lines;
 
-  // These points kind of suck.
-  levelset.getLines(points, lines);
-  
-  // TODO: need to add more points to the border edges
-  //  addBorderEdges(points, lines, &levelset);
-  for (auto& p : points) {
-    p.x = (p.x - num_pad_highres) * double(lowres_mask.w) / (highres_mask.w - 2 * num_pad_highres);
-    p.y = (p.y - num_pad_highres) * double(lowres_mask.h) / (highres_mask.h - 2 * num_pad_highres);
+  if (AllWhite(lowres_mask)) {
+    std::cout << "All white:" << lowres_mask.w << " " << lowres_mask.h;
+    for (int y = 0; y <= lowres_image.h; ++y) {
+      points.push_back(nacb::Vec2d(0, y));
+      points.push_back(nacb::Vec2d(lowres_image.w, y));
+    }
+    for (int x = 0; x <= lowres_image.w; ++x) {
+      points.push_back(nacb::Vec2d(x, 0));
+      points.push_back(nacb::Vec2d(x, lowres_image.h));
+    }
+  } else {
+    FullLevelSet2D levelset(highres_mask, 1.0, 1.0);
+    // These points kind of suck.
+    levelset.getLines(points, lines);
+
+    // TODO: need to add more points to the border edges
+    //  addBorderEdges(points, lines, &levelset);
+    for (auto& p : points) {
+      p.x = (p.x - num_pad_highres) * double(lowres_mask.w) / (highres_mask.w - 2 * num_pad_highres);
+      p.y = (p.y - num_pad_highres) * double(lowres_mask.h) / (highres_mask.h - 2 * num_pad_highres);
+    }
+    points = RemoveNearPoints(points, 0.125);
   }
-  points = RemoveNearPoints(points, 0.125);
   const int num_points_border = points.size();
   
   std::set<int> interior_points;
@@ -232,8 +245,8 @@ int main(int ac, char* av[]) {
   }
 
   for (auto& p: points) {
-    p.x += 0.01 * ((double(rand()) / RAND_MAX) - 0.5);
-    p.y += 0.01 * ((double(rand()) / RAND_MAX) - 0.5);
+    p.x += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
+    p.y += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
   }
 
   std::vector<nacb::Vec3<int> > tris = delaunay(points);
@@ -279,8 +292,8 @@ int main(int ac, char* av[]) {
       face.vi[1] = tri[2] + num_points_keep;
       face.vi[2] = tri[1] + num_points_keep;
       face.tci[0] = tri[0];
-      face.tci[1] = tri[1];
-      face.tci[2] = tri[2];
+      face.tci[1] = tri[2];
+      face.tci[2] = tri[1];
       mesh.faces.push_back(face);
     }
   }
@@ -319,10 +332,35 @@ int main(int ac, char* av[]) {
       }
     }
   }
+  mesh.initNormals();
+  if (lowres_image.w == 8 || lowres_image.h == 8) {
+    return mesh;
+  }
   SmoothMesh(&mesh);
-  SmoothMesh(&mesh);  
-  mesh = BlowUpMesh(mesh);
+  SmoothMesh(&mesh);
+  mesh.initNormals();
+  return BlowUpMesh(mesh);  
+}
+
+#ifdef MESH_UTILS_MAIN
+int main(int ac, char* av[]) {
+  nacb::Image8 lowres_image;
+  nacb::Image8 highres_image;
+
+  if (!lowres_image.read(av[1])) {
+    std::cerr << "Unable to read lowres image from:" << av[1] << std::endl;
+    return -1;
+  }
+  if (!highres_image.read(av[2])) {
+    std::cerr << "Unable to read highres image from:" << av[2] << std::endl;
+    return -1;
+  }
+  nacb::Vec3<int> bg_color(lowres_image(0, 0, 0),
+                           lowres_image(0, 0, 1),
+                           lowres_image(0, 0, 2));
+  auto mesh = CreateMeshFromImages(lowres_image, highres_image, bg_color);
   mesh.saveObj("/tmp/mesh_utils.obj");
   
   return 0;
 }
+#endif
