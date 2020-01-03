@@ -2,7 +2,7 @@ LIBS = $(shell pkg-config --libs nimage nmath protobuf)
 .SUFFIXES = .cc .o
 INC=-I/home/birkbeck/svn/misc -I${HOME}/svn
 
-FLAGS=-O3
+FLAGS=-g
 all: extract_colors highres_boundary
 
 extract_colors: extract_colors.cc
