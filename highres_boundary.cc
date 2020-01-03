@@ -169,7 +169,7 @@ nacb::Imagef HighresBoundaryColor(const nacb::Image8& image,
     nacb::Imagef upres_score = upsample(color_mask.second, factor);
     highres_masks.push_back(upres_score);
   }
-  nacb::Imagef final(highres_masks[0].w, highres_masks[1].h, 3);
+  nacb::Imagef final(highres_masks[0].w, highres_masks[0].h, 3);
   for (int y = 0; y < final.h; ++y) {
     for (int x = 0; x < final.w; ++x) {
       int maxi = 0;

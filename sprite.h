@@ -59,6 +59,14 @@ public:
     std::string str(reinterpret_cast<const char*>(image.data), image.w * image.h * 3);
     return secondary_data_[str];
   }
+
+  std::unordered_map<std::string, nacb::Image8>::iterator begin() {
+    return database_.begin();
+  }
+  std::unordered_map<std::string, nacb::Image8>::iterator end() {
+    return database_.end();
+  }
+
  private:
   std::unordered_map<std::string, nacb::Image8> database_;
   std::unordered_map<std::string, T> secondary_data_;

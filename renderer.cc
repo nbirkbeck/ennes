@@ -23,6 +23,7 @@ void MakeQuad(nappear::Mesh* mesh) {
   mesh->tvert.push_back(nacb::Vec2d( 1, 1));
   mesh->tvert.push_back(nacb::Vec2d( 1,  0));
   mesh->tvert.push_back(nacb::Vec2d( 0, 0));
+
   nappear::Mesh::Face face;
   face.vi[0] = 0;
   face.vi[1] = 1;
@@ -184,10 +185,7 @@ public:
     for (auto& group : bg_groups) {
       if (!group.walkable) {
         k++;
-        nacb::Image8 tex = image.subimage((8 - vscroll_mod8) + group.min_x * 8,
-                                          group.min_y * 8,
-                                          (group.max_x + 1 - group.min_x) * 8,
-                                          (group.max_y + 1 - group.min_y) * 8);
+        nacb::Image8 tex = group.ExtractImage(8 - vscroll_mod8)
         if (!sprite_db_.Exists(tex)) {
           std::unique_ptr<nappear::Mesh> mesh(new nappear::Mesh);
           std::unique_ptr<nacb::Image8> texture(new nacb::Image8);
@@ -273,6 +271,14 @@ public:
       ProcessFrame();
       frame_number_++;
       break;
+    case 'f':
+      flip_ = !flip_;
+      if (flip_) {
+        cpos.y = -2;
+      } else {
+        cpos.y = 0;
+      }
+      break;
     }
 
     refresh();
@@ -336,6 +342,7 @@ public:
   }
   
   int frame_number_ = 0;
+  bool flip_ = false;
   nappear::Mesh background_mesh_;
   nappear::Mesh container_mesh_;
   GLuint background_tex_;
