@@ -17,3 +17,7 @@ int RenderBackground(const nes::RenderSequence::FrameState& frame_state,
 const int GetAttributeColor(const std::string& name_table, int x, int y);
 
 void ClearImage(nacb::Image8& image, const uint8_t color[3]);
+
+bool LoadRenderSequence(const std::string& filename,
+                        nes::RenderSequence* render_sequence);
+                        

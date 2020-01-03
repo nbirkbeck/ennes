@@ -103,3 +103,25 @@ int RenderBackground(const nes::RenderSequence::FrameState& frame_state,
   }
   return current_state->ppu().vscroll() % 8;
 }
+
+bool LoadRenderSequence(const std::string& filename,
+                        nes::RenderSequence* seq) {
+
+  seq->Clear();
+  FILE* file= fopen(filename.c_str(), "r");
+  if (!file) {
+    std::cout << "Unable to open " << filename << std::endl;
+    return false;
+  }
+  
+  fseek(file, 0, SEEK_END);
+  const int size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  
+  std::string bytes(size, 0);
+  fread(&bytes[0], size, 1, file);
+  fclose(file);
+  seq->ParseFromString(bytes);
+  std::cout << "Num frames:" <<  seq->frame_state_size() << std::endl;
+  return true;
+}

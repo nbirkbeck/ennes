@@ -1,8 +1,7 @@
-#include <nimage/image.h>
+#include "highres_boundary.h"
+
 #include <nmath/sparsematrix.h>
 #include <limits>
-#include <algorithm>
-#include <functional>
 #include "extract_colors.h"
 
 namespace {

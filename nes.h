@@ -6,6 +6,8 @@
 static constexpr int kNesWidth = 256;
 static constexpr int kNesHeight = 240;
 static constexpr int kNumSprites = 64;
+static constexpr int kNesBlocksWidth = kNesWidth / 8;
+static constexpr int kNesBlocksHeight = kNesHeight / 8;
 
 static constexpr uint8_t kNesPalette[64][3] =
 {
