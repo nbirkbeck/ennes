@@ -502,6 +502,8 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   blowup_options_t opts;
   opts.alpha = small_image ? 0.07 : 0.185;
   opts.ntime = small_image ? 10 : 20;
+  opts.alpha += 0.3;
+  opts.beta += 2;
   return BlowUpMesh(mesh, opts);
 }
 

@@ -11,6 +11,7 @@
 #include "screen.h"
 #include "highres_boundary.h"
 #include "mesh_utils.h"
+#include <sys/stat.h>
 
 const int kFactor = 8;
 
@@ -268,11 +269,16 @@ public:
     // FIXME: This is a hack for SMB1.
     render_state.mutable_ppu()->set_name_table(0);
 
+    nacb::Timer timer;
     std::map<int, int> line_starts = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
+    std::cout << "Render background:" << timer.stop() << std::endl;
 
+    timer.start();
     std::vector<BackgroundGroup> bg_groups =
       FindBackgroundGroups(&image, bg, line_starts);
+    std::cout << "Find background groups:" << timer.stop() << std::endl;
 
+    timer.start();
     for (auto& group : bg_groups) {
       if (!group.walkable) {
         auto geom = CreateGroupMeshGeom(group, image, bg, line_starts, &screen_db_);
@@ -286,6 +292,7 @@ public:
         }
       }
     }
+    std::cout << "Loading background geoms:" << timer.stop() << std::endl;
 
     glBindTexture(GL_TEXTURE_2D, background_tex_);
     image.subimage(8, 8, kNesWidth, kNesHeight).initTexture();
@@ -296,6 +303,9 @@ public:
     std::vector<SpriteGroup> groups = GroupSprites(sprites, render_state);
 
     sprite_start_ = geoms_.size();
+
+
+    timer.start();
     
     int sprite_index = 0;
     for (auto& sprite_group : groups) {
@@ -315,7 +325,8 @@ public:
         sprite_pos_ = nacb::Vec3d(sprite_group.x, sprite_group.y, 0);
       }
       sprite_index++;
-    }    
+    }
+    std::cout << "Loading foreground geoms:" << timer.stop() << std::endl;
   }
   
   virtual bool keyboard(unsigned char c, int x, int y) {
@@ -334,6 +345,9 @@ public:
       break;
     case 'F':
       follow_ = true;
+      break;
+    case 's':
+      SaveCache();
       break;
     }
 
@@ -427,6 +441,66 @@ public:
         2 * (1.0 - sprite_pos_.y / kNesHeight) - 1.0, cpos.z);
     }
   }
+
+  void SaveCache() {
+    std::string sprite_dir = (save_cache_dir_ + "/sprites");
+    std::string screen_dir = (save_cache_dir_ + "/screen");
+    mkdir((sprite_dir).c_str(), 0777);
+    mkdir((screen_dir).c_str(), 0777);
+
+    SaveSpriteDatabase(sprite_db_, sprite_dir);
+    SaveSpriteDatabase(screen_db_, screen_dir);
+  }
+
+  void SaveSpriteDatabase(SpriteDatabase<std::unique_ptr<Geometry>>& sprite_db,
+                          const std::string sprite_dir) {
+    int i = 0;
+    for (const auto& it : sprite_db) {
+      char dirname[2048];
+      snprintf(dirname, sizeof(dirname), "%s/%04d", sprite_dir.c_str(), i);
+      mkdir(dirname, 0777);
+
+      char filename[2048];
+      snprintf(filename, sizeof(filename), "%s/key.png", dirname);
+      const_cast<nacb::Image8&>(it.second).write(filename);
+
+      auto& geom = sprite_db.Lookup(it.second);
+      snprintf(filename, sizeof(filename), "%s/tex.png", dirname);
+      geom->image_->write(filename);
+      
+      snprintf(filename, sizeof(filename), "%s/mesh.obj", dirname);
+      geom->mesh_->saveObj(filename);
+      ++i;
+    }
+  }
+
+  void ReadCache(const std::string& cache_dir) {
+    std::string sprite_dir = (cache_dir + "/sprites");
+    std::string screen_dir = (cache_dir + "/screen");
+    ReadSpriteDatabase(&sprite_db_, sprite_dir);
+    ReadSpriteDatabase(&screen_db_, screen_dir);
+  }
+
+  void ReadSpriteDatabase(SpriteDatabase<std::unique_ptr<Geometry>>* sprite_db,
+                          const std::string& sprite_dir) {
+    for (int i = 0; i < 10000; ++i) {
+      char filename[2048];
+      snprintf(filename, sizeof(filename), "%s/%04d/key.png", sprite_dir.c_str(), i);
+      nacb::Image8 key;
+      if (!key.read(filename)) break;
+
+      snprintf(filename, sizeof(filename), "%s/%04d/tex.png", sprite_dir.c_str(), i);
+      auto tex = std::make_unique<nacb::Image8>();
+      if (!tex->read(filename)) break;
+      
+      snprintf(filename, sizeof(filename), "%s/%04d/mesh.obj", sprite_dir.c_str(), i);
+      auto mesh = std::make_unique<nappear::Mesh>();
+      if (!mesh->readObj(filename)) break;
+      mesh->initNormals(true);
+      sprite_db->Insert(key, std::make_unique<Geometry>(std::move(mesh), std::move(tex)));
+      std::cout << "Loaded:" << i << std::endl;
+    }
+  }
   
   int frame_number_ = 0;
   bool flip_ = false;
@@ -440,6 +514,7 @@ public:
   std::vector<GeomRef> geoms_;
   int sprite_start_;
   nacb::Vec3d sprite_pos_;
+  std::string save_cache_dir_ = "/tmp/cache";
 };
 
 int main(int ac, char* av[]) {
@@ -453,8 +528,11 @@ int main(int ac, char* av[]) {
     return -1;
   }
   std::cout << "Loading took:" << timer.stop() << std::endl;
+  if (ac > 2) {
+    window.ReadCache(av[2]);
+  }
   
-  window.setRefreshRate(60);
+  window.setRefreshRate(120);
   window.loop(true);
   return 0;
 }

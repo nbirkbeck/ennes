@@ -48,14 +48,14 @@ nacb::Image<T> PadImage(const nacb::Image<T>& image, int pad_size) {
 }
 
 nacb::Imagef HighresBoundarySimple(const nacb::Image8& image, const int factor) {
-  nacb::Imagef upsampled;
+  nacb::Image8 upsampled;
   const int pad_size = 4;
   upsampled = PadImage(image, pad_size).resize(
                                                (image.w + 2 * pad_size) * factor,
                                                (image.h + 2 * pad_size) * factor);
   const double filter_sigma = factor / 3.0;
   const int filter_half_size  = std::max(1, factor * 3);
-  nacb::Imagef filtered = GaussianFilter(upsampled, filter_sigma, filter_half_size);
+  nacb::Image8 filtered = GaussianFilter(upsampled, filter_sigma, filter_half_size);
   return filtered.subimage(pad_size * factor - factor / 2, pad_size * factor - factor / 2, image.w * factor, image.h * factor);
 }
 
@@ -167,37 +167,34 @@ nacb::Imagef HighresBoundary(const nacb::Image8& image, const int factor) {
 
 nacb::Imagef HighresBoundaryBinary(const nacb::Image8& image,
                                    std::function<nacb::Imagef(const nacb::Image8&, int factor)> upsample,
-                                   int factor) {
+                                   int factor, const Color3b& bg) {
   nacb::Imagef highres;
+
   int fg_index = 0;
   auto color_masks = ExtractColorMasks(image);
-  int i = 0;
-  for (const auto& color_mask: color_masks) {
-    nacb::Vec3f color = color_mask.first;
-    if (color == nacb::Vec3f(image(0, 0, 0) / 255.0f,
-                             image(0, 0, 1) / 255.0f,
-                             image(0, 0, 2) / 255.0f)) {
-      std::cout << "Background color:\n" << i;
-    } else {
+  for (int i = 0; i < color_masks.size(); ++i) {
+    auto& color_mask = color_masks[i];
+    const Color3b color = color_mask.first;
+    if (!(color == bg)) {
       highres = upsample(color_mask.second, factor);
       fg_index = i;
     }
-    ++i;
   }
-  nacb::Imagef final(highres.w, highres.h, 3);
+
+  nacb::Image8 final(highres.w, highres.h, 3);
   for (int y = 0; y < final.h; ++y) {
     for (int x = 0; x < final.w; ++x) {
-      nacb::Vec3f color = color_masks[highres(x, y) > 0.5 ? fg_index : !fg_index].first;
+      const auto& color = color_masks[highres(x, y) > 0.5 ? fg_index : !fg_index].first;
       final(x, y, 0) = color.x;
       final(x, y, 1) = color.y;
       final(x, y, 2) = color.z;
     }
   }
-  return final; //.subimage(pad, pad, image.w, image.h);
+  return final;
   
 }
 
-nacb::Imagef HighresBoundaryColor(const nacb::Image8& image,
+nacb::Image8 HighresBoundaryColor(const nacb::Image8& image,
                                   std::function<nacb::Imagef(const nacb::Image8&, int factor)> upsample,
                                   int factor, const Color3b* bg) {
   std::vector<nacb::Imagef> highres_masks;
@@ -206,15 +203,14 @@ nacb::Imagef HighresBoundaryColor(const nacb::Image8& image,
 
   int index = 0;
   for (const auto& color_mask: color_masks) {
-    nacb::Vec3f color = color_mask.first;
-    if (bg && color == nacb::Vec3f((*bg)[0] / 255.0f, (*bg)[1] / 255.0f, (*bg)[2] / 255.0f)) {
+    const auto& color = color_mask.first;
+    if (bg && color == *bg) {
       bg_index = index;
     }
-    nacb::Imagef upres_score = upsample(color_mask.second, factor);
-    highres_masks.push_back(upres_score);
+    highres_masks.push_back(upsample(color_mask.second, factor));
     index++;
   }
-  nacb::Imagef final(highres_masks[0].w, highres_masks[0].h, 3 + (bg_index >= 0));
+  nacb::Image8 final(highres_masks[0].w, highres_masks[0].h, 3 + (bg_index >= 0));
   for (int y = 0; y < final.h; ++y) {
     for (int x = 0; x < final.w; ++x) {
       int maxi = 0;
@@ -225,13 +221,13 @@ nacb::Imagef HighresBoundaryColor(const nacb::Image8& image,
           maxi = i;
         }
       }
-      nacb::Vec3f color = color_masks[maxi].first;
+      const auto& color = color_masks[maxi].first;
       final(x, y, 0) = color.x;
       final(x, y, 1) = color.y;
       final(x, y, 2) = color.z;
       if (bg_index >= 0) {
         final(x, y, 3) =
-          (highres_masks[maxi](x, y, 0) > highres_masks[bg_index](x, y, 0)) ? 1.0f : 0.1;
+          (highres_masks[maxi](x, y, 0) > highres_masks[bg_index](x, y, 0)) ? 255 : 1;
       }
     }
   }
@@ -244,10 +240,11 @@ int main(int ac, char* av[]) {
   const int factor = atoi(av[2]);
   if (ac > 3 && atoi(av[3])) {
     Color3b bg_color{image(0, 0, 0), image(0, 0, 1), image(0, 0, 2)};
-    nacb::Imagef final = HighresBoundaryColor(image, HighresBoundarySimple, factor, &bg_color);
+    nacb::Image8 final = HighresBoundaryColor(image, HighresBoundarySimple, factor, &bg_color);
     final.write("/tmp/final.png");
   } else if (ac > 3 && atoi(av[3]) == 0) {
-    nacb::Imagef final = HighresBoundaryBinary(image, HighresBoundarySimple, factor);
+    Color3b bg_color{image(0, 0, 0), image(0, 0, 1), image(0, 0, 2)};
+    nacb::Image8 final = HighresBoundaryBinary(image, HighresBoundarySimple, factor, bg_color);
     final.write("/tmp/final.png");
   } else {
     HighresBoundary(image, factor);
