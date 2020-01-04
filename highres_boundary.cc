@@ -199,7 +199,7 @@ nacb::Imagef HighresBoundaryBinary(const nacb::Image8& image,
 
 nacb::Imagef HighresBoundaryColor(const nacb::Image8& image,
                                   std::function<nacb::Imagef(const nacb::Image8&, int factor)> upsample,
-                                  int factor, const uint8_t* bg) {
+                                  int factor, const Color3b* bg) {
   std::vector<nacb::Imagef> highres_masks;
   int bg_index = -1;
   auto color_masks = ExtractColorMasks(image);
@@ -207,7 +207,7 @@ nacb::Imagef HighresBoundaryColor(const nacb::Image8& image,
   int index = 0;
   for (const auto& color_mask: color_masks) {
     nacb::Vec3f color = color_mask.first;
-    if (bg && color == nacb::Vec3f(bg[0] / 255.0f, bg[1] / 255.0f, bg[2] / 255.0f)) {
+    if (bg && color == nacb::Vec3f((*bg)[0] / 255.0f, (*bg)[1] / 255.0f, (*bg)[2] / 255.0f)) {
       bg_index = index;
     }
     nacb::Imagef upres_score = upsample(color_mask.second, factor);
@@ -243,8 +243,8 @@ int main(int ac, char* av[]) {
   nacb::Image8 image(av[1]);
   const int factor = atoi(av[2]);
   if (ac > 3 && atoi(av[3])) {
-    uint8_t bg_color[3] = {image(0, 0, 0), image(0, 0, 1), image(0, 0, 2)};
-    nacb::Imagef final = HighresBoundaryColor(image, HighresBoundarySimple, factor, bg_color);
+    Color3b bg_color{image(0, 0, 0), image(0, 0, 1), image(0, 0, 2)};
+    nacb::Imagef final = HighresBoundaryColor(image, HighresBoundarySimple, factor, &bg_color);
     final.write("/tmp/final.png");
   } else if (ac > 3 && atoi(av[3]) == 0) {
     nacb::Imagef final = HighresBoundaryBinary(image, HighresBoundarySimple, factor);

@@ -14,7 +14,7 @@ const int kGridWidth = kNesBlocksWidth + 1;
 
 bool IsEdgeBackground(const nacb::Image8& im,
                       int x, int y,
-                      const uint8_t* bg_color,
+                      const Color3b& bg_color,
                       int dx, int dy) {
   int high = 7;
   int coord = 0;
@@ -66,7 +66,7 @@ std::vector<std::pair<int, int>> GetTopBlocks(const std::vector<std::pair<int, i
 bool IsBlockWalkable(const std::pair<int, int>& block, int x0,
                      nacb::Image8* image,
                      const nacb::Imagef& g2,
-                     const uint8_t* bg) {
+                     const Color3b& bg) {
   int by = block.second;
   int bx = block.first;
   if (by == 0) return false;
@@ -109,7 +109,7 @@ bool IsBlockListWalkable(const std::vector<std::pair<int, int>>& g,
                          nacb::Image8* image,
                          const nacb::Imagef& g2,
                          const std::unordered_map<int, int>& block_to_group,
-                         const uint8_t bg[3]) {
+                         const Color3b& bg) {
   std::vector<std::pair<int, int>> top_blocks = GetTopBlocks(g, block_to_group);
   int num_walkable = 0;
   for (const auto& block : top_blocks) {
@@ -121,7 +121,7 @@ bool IsBlockListWalkable(const std::vector<std::pair<int, int>>& g,
 
 
 std::vector<BackgroundGroup>
-FindBackgroundGroups(nacb::Image8* image, const uint8_t bg[3],
+FindBackgroundGroups(nacb::Image8* image, const Color3b& bg,
                      const std::map<int, int>& line_starts) {
   nacb::Imagef grads[3] = {nacb::Imagef(1,1,1),
                            nacb::Imagef(1,1,1),
@@ -140,7 +140,7 @@ FindBackgroundGroups(nacb::Image8* image, const uint8_t bg[3],
     for (int bx = 0; bx < kGridWidth; bx++) {
       const int x0 = line_starts.lower_bound(by * 8)->second;
       std::set<int> colors = GetUniqueColors(*image, bx * 8 + x0, by *8, 8, 8);
-      auto it = colors.find(ColorIndex(bg[0], bg[1], bg[2]));
+      auto it = colors.find(ColorIndex(bg));
       if (it != colors.end()) {
         colors.erase(it);
       }

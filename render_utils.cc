@@ -41,7 +41,7 @@ const int GetAttributeColor(const std::string& name_table, int x, int y) {
   return (attribute >> (((sy & 0x1)<< 2) + ((sx & 0x1) << 1))) & 0x3;
 }
 
-void ClearImage(nacb::Image8& image, const uint8_t color[3]) {
+void ClearImage(nacb::Image8& image, const Color3b& color) {
   for (int y = 0; y < image.h; ++y) {
     for (int x = 0; x < image.w; ++x) {
       for (int c = 0; c < 3; ++c) {

@@ -44,16 +44,15 @@ void MakeQuad(nappear::Mesh* mesh) {
 }
 
 void CreateMeshForSprite(const nacb::Image8& sprite_image,
-                         const nacb::Vec3<int>& bg_color,
+                         const Color3b& bg,
                          nappear::Mesh* mesh,
                          nacb::Image8* texture) {
-  uint8_t bg[3] = {(uint8_t)bg_color.x, (uint8_t) bg_color.y, (uint8_t) bg_color.z};
   *texture =
-    HighresBoundaryColor(sprite_image, HighresBoundarySimple, kFactor, bg);
+    HighresBoundaryColor(sprite_image, HighresBoundarySimple, kFactor, &bg);
   if (1) { //sprite_image.w % 8 == 0  && sprite_image.h % 16 == 0) {
-    *mesh = CreateMeshFromImages3D(sprite_image, *texture, bg_color);
+    *mesh = CreateMeshFromImages3D(sprite_image, *texture, bg);
   } else {
-    *mesh = CreateMeshFromImages(sprite_image, *texture, bg_color);
+    *mesh = CreateMeshFromImages(sprite_image, *texture, bg);
   }
   for (auto& v : mesh->vert) {
     //v.y = kNesHeight - v.y;
@@ -66,12 +65,12 @@ void CreateMeshForSprite(const nacb::Image8& sprite_image,
 void CreateCube(nappear::Mesh* mesh,
                 double w=8.0, double h=8.0, double d=16.0,
                 bool flip = false,
-                const nacb::Image8* tex = 0, const uint8_t* bg = 0) {
+                const nacb::Image8* tex = 0, const Color3b* bg = 0) {
   double x0 = 0;
   double x1 = w;
   if (tex && bg) {
-    if (IsEdgeBackground(*tex, 0, 0, bg, -1, 0)) x0 = 2;
-    if (IsEdgeBackground(*tex, tex->w - 8, 0, bg,  1, 0)) x1 -= 2;
+    if (IsEdgeBackground(*tex, 0, 0, *bg, -1, 0)) x0 = 2;
+    if (IsEdgeBackground(*tex, tex->w - 8, 0, *bg,  1, 0)) x1 -= 2;
   }
   mesh->vert.push_back(nacb::Vec3d(x0, 0, 0));
   mesh->vert.push_back(nacb::Vec3d(x1, 0, 0));
@@ -158,7 +157,7 @@ public:
   nacb::Vec3d pos_;
 };
 
-void ClearBlock(nacb::Image8& image, int x0, int y0, const uint8_t bg[3]) {
+void ClearBlock(nacb::Image8& image, int x0, int y0, const Color3b& bg) {
   for (int y = 0; y < 8; ++y) {
     const int yo = y0 + y;
     if (yo < 0 || yo >= image.h) continue;
@@ -175,7 +174,7 @@ void ClearBlock(nacb::Image8& image, int x0, int y0, const uint8_t bg[3]) {
 template <class T>
 GeomRef CreateGroupMeshGeom(const BackgroundGroup& group,
                             nacb::Image8& image,
-                            const uint8_t bg[3],
+                            const Color3b& bg,
                             const std::map<int, int>& line_starts,
                             SpriteDatabase<T>* db) {
   nacb::Image8 tex = group.ExtractImage(image, line_starts);
@@ -183,10 +182,9 @@ GeomRef CreateGroupMeshGeom(const BackgroundGroup& group,
   GeomRef geom_ref;
   nacb::Vec3d pos(group.min_x * 8 + (line_start - 8) % 8, group.min_y * 8, 0);
   if (!db->Exists(tex)) {
-    std::unique_ptr<nappear::Mesh> mesh(new nappear::Mesh);
+    auto mesh = std::make_unique<nappear::Mesh>();
     std::unique_ptr<nacb::Image8> texture(new nacb::Image8);
-    CreateMeshForSprite(tex, nacb::Vec3<int>(bg[0], bg[1], bg[2]),
-                        mesh.get(), texture.get());
+    CreateMeshForSprite(tex, bg, mesh.get(), texture.get());
     auto geom = std::make_unique<Geometry>(std::move(mesh), std::move(texture));
     int dx = (8 - line_start);
     if (dx == 8) dx = 0;
@@ -205,7 +203,7 @@ GeomRef CreateGroupMeshGeom(const BackgroundGroup& group,
 template <class T>
 GeomRef CreateGroupCubeGeom(const BackgroundGroup& group,
                             nacb::Image8& image,
-                            const uint8_t* bg,
+                            const Color3b& bg,
                             const std::map<int, int>& line_starts,
                             SpriteDatabase<T>* db) {
   const int line_start = line_starts.lower_bound(group.min_y * 8)->second;
@@ -216,7 +214,7 @@ GeomRef CreateGroupCubeGeom(const BackgroundGroup& group,
   if (!db->Exists(tex)) {
     std::unique_ptr<nappear::Mesh> mesh(new nappear::Mesh);
     CreateCube(mesh.get(), (group.max_x - group.min_x + 1) * 8,
-               (group.max_y - group.min_y + 1) * 8, 16, false, &tex, bg);
+               (group.max_y - group.min_y + 1) * 8, 16, false, &tex, &bg);
 
     std::unique_ptr<nacb::Image8> texture(new nacb::Image8);
     *texture =
@@ -261,7 +259,7 @@ public:
     
     auto frame_state = sequence_.frame_state(frame_number_);
     nes::RenderState& render_state = *frame_state.mutable_start_frame();
-    const uint8_t* bg = kNesPalette[render_state.image_palette()[0]];
+    const auto& bg = kNesPalette[render_state.image_palette()[0]];
 
     const bool kBlockAligned = true;
     nacb::Image8 image(kNesWidth + (kBlockAligned ? 16: 0), kNesHeight, 3);
@@ -270,7 +268,6 @@ public:
     // FIXME: This is a hack for SMB1.
     render_state.mutable_ppu()->set_name_table(0);
 
-    //RenderSprites(render_state, kBlockAligned ? 8 : 0, /*foreground=*/false, &image);
     std::map<int, int> line_starts = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
 
     std::vector<BackgroundGroup> bg_groups =
@@ -294,10 +291,12 @@ public:
     image.subimage(8, 8, kNesWidth, kNesHeight).initTexture();
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // Currently, we don't distinguish between background and foreground sprites.
     Sprite* sprites = (Sprite*)render_state.sprite_data().c_str();                
     std::vector<SpriteGroup> groups = GroupSprites(sprites, render_state);
 
     sprite_start_ = geoms_.size();
+    
     int sprite_index = 0;
     for (auto& sprite_group : groups) {
       if (!sprite_db_.Exists(sprite_group.image)) {
@@ -342,10 +341,7 @@ public:
     return true;
   }
 
-  void drawScene() {
-    float ones[4] = {1, 1, 1, 1};
-    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, ones);
-
+  void SetupLighting() {
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
     static double angle = 0;
@@ -367,12 +363,15 @@ public:
     glEnable(GL_LIGHT2);
     glLightfv(GL_LIGHT2, GL_POSITION, light2);
     glLightfv(GL_LIGHT2, GL_DIFFUSE, gray);
+  }
 
-    glEnable(GL_NORMALIZE);
-    glEnable(GL_TEXTURE_2D);
+  void DrawBackground() {
     glBindTexture(GL_TEXTURE_2D, background_tex_);
     background_mesh_.draw();
+  }
 
+
+  void DrawGeoms() {
     //glDisable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_FRONT);
@@ -384,7 +383,9 @@ public:
     }
     glPopMatrix();
     glEnable(GL_DEPTH_TEST);
+  }
 
+  void DrawContainingCube() {
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glDisable(GL_TEXTURE_2D);
@@ -393,12 +394,27 @@ public:
 
     auto frame_state = sequence_.frame_state(frame_number_);
     nes::RenderState render_state = frame_state.start_frame();
-    const uint8_t* bg = kNesPalette[render_state.image_palette()[0]];
+    const auto& bg = kNesPalette[render_state.image_palette()[0]];
     nacb::Vec4f bg_color(bg[0] / 255.0f, bg[1] / 255.0f, bg[2] / 255.0f);
     glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, bg_color.data);
     container_mesh_.draw();
     glPopMatrix();
+  }
 
+  void drawScene() override {
+    float ones[4] = {1, 1, 1, 1};
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, ones);
+
+    SetupLighting();
+
+    glEnable(GL_NORMALIZE);
+    glEnable(GL_TEXTURE_2D);
+    
+    DrawBackground();
+
+    DrawGeoms();
+
+    DrawContainingCube();
     
     ProcessFrame();
     frame_number_++;
@@ -436,7 +452,7 @@ int main(int ac, char* av[]) {
   if (!window.LoadSequence(av[1])) {
     return -1;
   }
-  std::cout << "Loading took;" << timer.stop();
+  std::cout << "Loading took:" << timer.stop() << std::endl;
   
   window.setRefreshRate(60);
   window.loop(true);
