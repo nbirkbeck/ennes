@@ -10,6 +10,8 @@ void DrawPattern(nacb::Image8& image, int x, int y,
                  uint8_t entry, int color, TransformFlags flags) {
   const int index = 8 * entry;
   for (int yi = 0; yi < 8; ++yi) {
+    if (y + yi < 0) continue;
+    if (y + yi >= image.h) break;
     const int yi_transformed = (flags & FLIP_VERTICAL) ? (7 - yi) : yi;
     const uint8_t b1 = pattern_table[2 * index + yi_transformed];
     const uint8_t b2 = pattern_table[2 * index + 8 + yi_transformed];
@@ -54,6 +56,7 @@ void RenderSprites(const nes::RenderState& render_state, int x_offset,
                    nacb::Image8* image_ptr) {
   nacb::Image8& image = *image_ptr;
   Sprite* sprites = (Sprite*)render_state.sprite_data().c_str();
+  assert(render_state.sprite_data().size() == 4 * kNumSprites);
   for (int i = 0; i < kNumSprites; ++i) {
     if (sprites[i].IsActive() &&
         (sprites[i].IsForeground() == foreground)) {
@@ -65,20 +68,25 @@ void RenderSprites(const nes::RenderState& render_state, int x_offset,
   }
 }
 
-int RenderBackground(const nes::RenderSequence::FrameState& frame_state,
+std::map<int, int>
+RenderBackground(const nes::RenderSequence::FrameState& frame_state,
                       int x_offset, nacb::Image8* image_ptr) {
   nacb::Image8& image = *image_ptr;
   nes::RenderState render_state = frame_state.start_frame();
   const nes::RenderState* current_state = &render_state;
   int next_update_index = 0;
 
+  std::map<int, int> line_starts;
   for (int y = 0; y < kNesHeight; y += 8) {
-    if (next_update_index < frame_state.state_update_size() &&
-        y + 4 >= frame_state.state_update(next_update_index).ppu().scan_line()) {
+    while (next_update_index < frame_state.state_update_size() &&
+           y + 4 >= frame_state.state_update(next_update_index).ppu().scan_line()) {
       current_state = &frame_state.state_update(next_update_index);
       next_update_index++;
     }
-
+    const int line_start = (x_offset - current_state->ppu().vscroll() % 8);
+    if (line_starts.empty() || line_starts.lower_bound(y)->second != line_start) {
+      line_starts[y] = line_start;
+    }
     // Currently only supports horizontal scrolling
     {
       const std::string& name_table =  render_state.name_table(current_state->ppu().name_table());
@@ -101,7 +109,7 @@ int RenderBackground(const nes::RenderSequence::FrameState& frame_state,
       }
     }
   }
-  return current_state->ppu().vscroll() % 8;
+  return line_starts;
 }
 
 bool LoadRenderSequence(const std::string& filename,
