@@ -4,6 +4,7 @@
 #include <levset/levset2d.h>
 #include <levset/levset3d.h>
 #include <nappear/mesh.h>
+#include <nappear/fbo.h>
 #include <nmath/vec2.h>
 #include <nmath/vec3.h>
 #include "poly/cpp/delaunay.h"
@@ -12,6 +13,7 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
+
 
 nacb::Image8 GetMask(const nacb::Image8& image,
                      const Color3b& bg_color,

@@ -1,4 +1,4 @@
-LIBS = $(shell pkg-config --libs nimage nmath protobuf)
+LIBS = $(shell pkg-config --libs nimage nmath protobuf) -lnappear_util
 .SUFFIXES = .cc .o
 INC=-I/home/birkbeck/svn/misc -I${HOME}/svn
 

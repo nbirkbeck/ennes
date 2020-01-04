@@ -6,6 +6,7 @@
 #include "nes.h"
 #include "render_utils.h"
 #include <nappear/mesh.h>
+#include <nappear/fbo.h>
 #include "proto/render_state.pb.h"
 #include "sprite.h"
 #include "screen.h"
@@ -240,6 +241,8 @@ public:
   RenderWindow(): GLWindow(1920, 1080) {
     MakeQuad(&background_mesh_);
     CreateCube(&container_mesh_, 2 * 16.0 / 9.0, 2., 4., true);
+
+    glewInit();
     
     glGenTextures(1, &background_tex_);
     cpos = nacb::Vec3d(0, 0, 3);
@@ -249,6 +252,15 @@ public:
     glDisable(GL_ALPHA_TEST);
     fov = 55;
     farPlane = 10.0;
+    fbo_= std::make_unique<nappear::FrameBufferObject>(512, 512);
+
+    glGenTextures(2, cube_tex_);
+    for (int i = 0; i < 2; ++i) {
+      glBindTexture(GL_TEXTURE_2D, cube_tex_[i]);
+      nacb::Image8 im(512, 512, 4);
+      im.initTexture();
+    }
+    std::cout << "texture:" << background_tex_ << " " << fbo_->getColorTexture();
   }
 
   bool LoadSequence(const std::string& str) {
@@ -359,7 +371,7 @@ public:
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
     static double angle = 0;
-    angle += M_PI / 180.0;
+    //angle += M_PI / 180.0;
     float light[4] = {0.7*cos(angle), 0.7*sin(angle), 0.7, 0};
     float white[4] = {0.7, 0.7, 0.7, 1};
     glLightfv(GL_LIGHT0, GL_POSITION, light);
@@ -387,8 +399,6 @@ public:
 
   void DrawGeoms() {
     //glDisable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);
     glPushMatrix();
     glScalef(2.0 * (16.0 / 9.0) / kNesWidth, -2.0 / kNesHeight, 3.0 / kNesWidth);
     glTranslatef(-kNesWidth/2, -kNesHeight/2, 0);
@@ -399,46 +409,151 @@ public:
     glEnable(GL_DEPTH_TEST);
   }
 
-  void DrawContainingCube() {
+  void DrawContainingCube(GLuint tex) {
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    float m[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}};
+    glTexGenfv(GL_S, GL_EYE_PLANE, m[0]);
+    glTexGenfv(GL_T, GL_EYE_PLANE, m[1]);
+    glTexGenfv(GL_R, GL_EYE_PLANE, m[2]);
+    glTexGenfv(GL_Q, GL_EYE_PLANE, m[3]);
+
+    glTexGenf(GL_S, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+    glTexGenf(GL_T, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+    glTexGenf(GL_R, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+    glTexGenf(GL_Q, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+
+    glMatrixMode(GL_TEXTURE);
+    glLoadIdentity();
+
+    glTranslatef(0.5, 0.5, 0.);
+    glScalef(0.5, 0.5, 1.0);
+    applyProjection();
+    applyModelview();
+
+    glEnable(GL_TEXTURE_GEN_S);
+    glEnable(GL_TEXTURE_GEN_T);
+    glEnable(GL_TEXTURE_GEN_R);
+    glEnable(GL_TEXTURE_GEN_Q);
+    
+    glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
-    glTranslatef(-16.0/9.0, -1, -0.001);
+    glTranslatef(-16.0/9.0, -1, -0.5);
 
     auto frame_state = sequence_.frame_state(frame_number_);
     nes::RenderState render_state = frame_state.start_frame();
     const auto& bg = kNesPalette[render_state.image_palette()[0]];
-    nacb::Vec4f bg_color(bg[0] / 255.0f, bg[1] / 255.0f, bg[2] / 255.0f);
+    nacb::Vec4f bg_color(0.5 * bg[0] / 255.0f, 0.5 * bg[1] / 255.0f, 0.5 * bg[2] / 255.0f);
     glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, bg_color.data);
     container_mesh_.draw();
     glPopMatrix();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glCullFace(GL_FRONT);
+
+    glDisable(GL_TEXTURE_GEN_S);
+    glDisable(GL_TEXTURE_GEN_T);
+    glDisable(GL_TEXTURE_GEN_R);
+    glDisable(GL_TEXTURE_GEN_Q);
+
+    glMatrixMode(GL_TEXTURE);
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
   }
 
-  void drawScene() override {
+  void DrawSceneInternal(bool draw_cube, GLuint cube_tex = 0) {
     float ones[4] = {1, 1, 1, 1};
     glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, ones);
 
+    glDisable(GL_CULL_FACE);
+    
     SetupLighting();
 
     glEnable(GL_NORMALIZE);
     glEnable(GL_TEXTURE_2D);
-    
+
     DrawBackground();
 
     DrawGeoms();
 
-    DrawContainingCube();
+    if (draw_cube) {
+      DrawContainingCube(cube_tex);
+    }
+  }
+
+  virtual void draw(){
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    applyProjection();
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    applyModelview();
+
+    drawScene();
+
+    swapBuffers();
+  }
+  
+  void drawScene() override {
+    bool reflection = !false;
+    if (reflection) {
+      for (int j = 0; j < 1; ++j) {
+        fbo_->bind(true);
+        fbo_->useColorTexture(cube_tex_[j]);
+        glDisable(GL_DEPTH_TEST);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glViewport(0, 0, 512, 512);
+
+        double planes[4][2] = {
+                               {0, -16.0/9},
+                               {0, 16.0/9},
+                               {1, -1},
+                               {1, 1}};
+        for (int i = 2; i < 4; ++i) {
+          glMatrixMode(GL_MODELVIEW);
+          glLoadIdentity();
+          applyModelview();
+
+          glTranslatef(planes[i][0] == 0 ? -planes[i][1] : 0,
+                       planes[i][0] == 1 ? -planes[i][1] : 0, 0);
+          glScalef(planes[i][0] == 0 ? -1 : 1, planes[i][0] == 1 ? -1 : 1, 1);
+          //glRotatef(10 * planes[i][1], planes[i][0] == 1, -(planes[i][0] == 0), 0);
+          glTranslatef(planes[i][0] == 0 ? planes[i][1] : 0,
+                       planes[i][0] == 1 ? planes[i][1] : 0, 0);
+          DrawSceneInternal(false, 0);
+        }
+
+        fbo_->useColorTexture(0);
+        fbo_->bind(false);
+        glEnable(GL_DEPTH_TEST);
+      }
+      
+      glMatrixMode(GL_MODELVIEW);
+      glLoadIdentity();
+      applyModelview();
     
+      glViewport(0, 0, 1920, 1080);
+    }
+
+    
+    DrawSceneInternal(true,  cube_tex_[0]); // fbo_->getColorTexture());
+    
+    if (follow_) {
+      cpos = cpos * 0.95 + 0.05*nacb::Vec3d(16.0/9.0*(2 * sprite_pos_.x / kNesWidth - 1),
+        2 * (1.0 - sprite_pos_.y / kNesHeight) - 1.0, cpos.z);
+    }
+
+        
     ProcessFrame();
     frame_number_++;
     if (frame_number_ >= sequence_.frame_state_size()) {
       frame_number_ = 0;
-    }
-
-    if (follow_) {
-      cpos = cpos * 0.95 + 0.05*nacb::Vec3d(16.0/9.0*(2 * sprite_pos_.x / kNesWidth - 1),
-        2 * (1.0 - sprite_pos_.y / kNesHeight) - 1.0, cpos.z);
     }
   }
 
@@ -511,16 +626,15 @@ public:
   nes::RenderSequence sequence_;
   SpriteDatabase<std::unique_ptr<Geometry>> sprite_db_;
   SpriteDatabase<std::unique_ptr<Geometry>> screen_db_;
+  std::unique_ptr<nappear::FrameBufferObject> fbo_;
   std::vector<GeomRef> geoms_;
   int sprite_start_;
   nacb::Vec3d sprite_pos_;
   std::string save_cache_dir_ = "/tmp/cache";
+  GLuint cube_tex_[2];
 };
 
 int main(int ac, char* av[]) {
-  glewInit();
-    
-
   RenderWindow window;
 
   nacb::Timer timer;
