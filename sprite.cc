@@ -79,7 +79,7 @@ void GetSpriteImages(const Sprite* sprites,
                   sprites[i].pattern, sprites[i].HighColorBits(), sprites[i].GetTransformFlags());
       sprite_images->push_back(sprite_image);
     } else {
-      sprite_images->push_back(nacb::Image8(1, 1, 1));
+      sprite_images->push_back(nacb::Image8(2, 2, 3));
     }
   }
 }
@@ -136,7 +136,8 @@ std::vector<SpriteGroup>
 GroupSprites(const Sprite* sprites, const nes::RenderState& render_state) {
   std::unordered_map<int, int> sprite_pos;
   std::vector<nacb::Image8> sprite_images;
-
+  sprite_images.reserve(kNumSprites);
+  
   nacb::Vec3<int> bg_color(kNesPalette[render_state.image_palette()[0]][0],
                            kNesPalette[render_state.image_palette()[0]][1],
                            kNesPalette[render_state.image_palette()[0]][2]);
@@ -144,9 +145,6 @@ GroupSprites(const Sprite* sprites, const nes::RenderState& render_state) {
   std::vector<std::vector<int> > sprite_groups =
     FindConnectedSprites(sprites, bg_color, sprite_images, sprite_pos);
 
-  std::cout << "Num active sprites: " << sprite_pos.size() 
-            << " num groups: " << sprite_groups.size()
-            << std::endl;
   std::vector<SpriteGroup> output;
   for (int i = 0; i < sprite_groups.size(); ++i) {
      int min_x = kNesWidth;

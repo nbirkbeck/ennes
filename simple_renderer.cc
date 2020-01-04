@@ -54,20 +54,19 @@ nacb::Image8 RenderFrame(const nes::RenderSequence::FrameState& frame_state,
   render_state.mutable_ppu()->set_name_table(0);
 
   RenderSprites(render_state, kBlockAligned ? 8 : 0, /*foreground=*/false, &image);
-  const int vscroll_mod8 = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
-  const int x0 = 8 - vscroll_mod8;
+  std::map<int, int> line_starts
+    = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
 
   std::vector<BackgroundGroup> background_groups =
-    FindBackgroundGroups(&image,  kNesPalette[render_state.image_palette()[0]], x0);
+    FindBackgroundGroups(&image,  kNesPalette[render_state.image_palette()[0]], line_starts);
   if (screen_database) {
     for (auto& group : background_groups) {
-      nacb::Image8 tex = group.ExtractImage(image, x0);
+      nacb::Image8 tex = group.ExtractImage(image, line_starts);
       if (!screen_database->Exists(tex)) {
         screen_database->Insert(tex, 1);
       }
     }
   }
-
     
   RenderSprites(render_state, kBlockAligned ? 8 : 0, /*foreground=*/true, &image);
 
@@ -118,6 +117,7 @@ int main(int ac, char* av[]) {
   SpriteDatabase<int> screen_database;
   SpriteDatabase<int> sprite_database;
   for (int i = 0; i < seq.frame_state_size(); ++i) {
+    std::cout << i << std::endl;
     nacb::Image8 image = RenderFrame(seq.frame_state(i), &sprite_database, &screen_database);
     char filename[1024];
     snprintf(filename, sizeof(filename), render_path.c_str(), i + output_offset);
