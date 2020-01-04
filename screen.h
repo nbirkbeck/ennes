@@ -57,11 +57,11 @@ struct BackgroundGroup {
 
 bool IsEdgeBackground(const nacb::Image8& im,
                       int x, int y,
-                      const uint8_t* bg_color,
+                      const Color3b& bg_color,
                       int dx, int dy);
 
 std::vector<BackgroundGroup>
-FindBackgroundGroups(nacb::Image8* image, const uint8_t bg[3],
+FindBackgroundGroups(nacb::Image8* image, const Color3b& bg_color,
                      const std::map<int, int>& line_starts);
 
 void SegmentIntoCubes(const BackgroundGroup& group,

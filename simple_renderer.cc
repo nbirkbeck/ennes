@@ -58,7 +58,7 @@ nacb::Image8 RenderFrame(const nes::RenderSequence::FrameState& frame_state,
     = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
 
   std::vector<BackgroundGroup> background_groups =
-    FindBackgroundGroups(&image,  kNesPalette[render_state.image_palette()[0]], line_starts);
+      FindBackgroundGroups(&image,  kNesPalette[render_state.image_palette()[0]], line_starts);
   if (screen_database) {
     for (auto& group : background_groups) {
       nacb::Image8 tex = group.ExtractImage(image, line_starts);

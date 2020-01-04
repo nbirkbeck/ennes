@@ -1,3 +1,5 @@
+#include "mesh_utils.h"
+
 #include <nimage/image.h>
 #include <levset/levset2d.h>
 #include <levset/levset3d.h>
@@ -12,7 +14,7 @@
 #include <unordered_map>
 
 nacb::Image8 GetMask(const nacb::Image8& image,
-                     const nacb::Vec3<int>& bg_color,
+                     const Color3b& bg_color,
                      int num_pad = 0) {
   nacb::Image8 mask(image.w + 2 * num_pad, image.h + 2 * num_pad, 1);
   mask = 0;
@@ -194,7 +196,7 @@ bool AllWhite(const nacb::Image8& image) {
 
 nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
                                    const nacb::Image8& highres_image,
-                                   const nacb::Vec3<int>& bg_color) {
+                                   const Color3b& bg_color) {
   const int num_pad_highres = 1;
     
   nacb::Image8 lowres_mask = GetMask(lowres_image, bg_color);
@@ -258,8 +260,8 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
     p.y += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
   }
 
-  std::vector<nacb::Vec3<int> > tris = delaunay(points);
-  std::vector<nacb::Vec3<int> > good_tris;
+  std::vector<nacb::Vec3<int>> tris = delaunay(points);
+  std::vector<nacb::Vec3<int>> good_tris;
   nappear::Mesh mesh;
 
   points.resize(num_points_keep);
@@ -451,7 +453,7 @@ RemoveDuplicates(const std::vector<Vec3d>& points,
 
 nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
                                      const nacb::Image8& highres_image,
-                                     const nacb::Vec3<int>& bg_color) {
+                                     const Color3b& bg_color) {
   const int factor = highres_image.w / lowres_image.w;
   const int num_pad_highres = factor;
 
@@ -469,7 +471,8 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   }
   FullLevelSet3D levset(highres_mask3d);
   //levset.moveAlongCurvature();
-  int num_pad_sample = 2;
+
+  const int num_pad_sample = 2;
   FullLevelSet3D levset_sample((lowres_mask.w + 2)* 2, (lowres_mask.h + 2) * 2, highres_mask3d.nchannels);
   assert(levset_sample.getWidth() * 4 == highres_mask.w);
   assert(levset_sample.getHeight() * 4 == highres_mask.h);
@@ -495,6 +498,7 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   const bool small_image = lowres_image.w <=8 || lowres_image.h <= 8;
   SmoothMesh(&mesh);
   mesh.initNormals();
+
   blowup_options_t opts;
   opts.alpha = small_image ? 0.07 : 0.185;
   opts.ntime = small_image ? 10 : 20;
@@ -514,9 +518,9 @@ int main(int ac, char* av[]) {
     std::cerr << "Unable to read highres image from:" << av[2] << std::endl;
     return -1;
   }
-  nacb::Vec3<int> bg_color(lowres_image(0, 0, 0),
-                           lowres_image(0, 0, 1),
-                           lowres_image(0, 0, 2));
+  Color3b bg_color(lowres_image(0, 0, 0),
+                   lowres_image(0, 0, 1),
+                   lowres_image(0, 0, 2));
   auto mesh = CreateMeshFromImages3D(lowres_image, highres_image, bg_color);
   mesh.saveObj("/tmp/mesh_utils.obj");
   

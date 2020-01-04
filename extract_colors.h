@@ -5,8 +5,14 @@
 #include <nimage/image.h>
 #include <nmath/vec3.h>
 
+#include "nes.h"
+
 inline int ColorIndex(uint8_t r, uint8_t g, uint8_t b) {
   return (int(r) << 16) | (int(g) << 8) | int(b);
+}
+
+inline int ColorIndex(const Color3b& color) {
+  return ColorIndex(color.x, color.y, color.z);
 }
 
 int NumOverlappingColors(const std::set<int>& s1,
