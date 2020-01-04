@@ -6,12 +6,10 @@
 #include <stdint.h>
 
 namespace {
-nacb::Vec3f IndexToColor(int color) {
-  return nacb::Vec3f(float((color >> 16) & 0xFF) / 255.0f,
-                     float((color >> 8) & 0xFF) / 255.0f,
-                     float(color & 0xFF) / 255.0f);
+Color3b IndexToColor(int color) {
+  return Color3b((color >> 16) & 0xFF, (color >> 8) & 0xFF, (color & 0xFF));
 }
-}
+}  // namespace
 
 int NumOverlappingColors(const std::set<int>& s1,
                          const std::set<int>& s2) {
@@ -21,9 +19,6 @@ int NumOverlappingColors(const std::set<int>& s1,
     cnt += s2.count(c);
   }
   return cnt;
-  std::vector<int> output;
-  std::set_intersection(s1.begin(), s1.end(), s2.begin(), s2.end(), std::back_inserter(output));
-  return output.size();
 }
 
 std::set<int> GetUniqueColors(const nacb::Image8& image,
@@ -39,9 +34,9 @@ std::set<int> GetUniqueColors(const nacb::Image8& image,
   return colors;
 }
 
-std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::Image8& image) {
+std::vector<std::pair<Color3b, nacb::Image8>> ExtractColorMasks(const nacb::Image8& image) {
   std::set<int> colors = GetUniqueColors(image);
-  std::vector<std::pair<nacb::Vec3f, nacb::Image8>> color_images;
+  std::vector<std::pair<Color3b, nacb::Image8>> color_images;
   
   for (const auto& color: colors) {
     nacb::Image8 mask(image.w, image.h, 3);
@@ -57,11 +52,11 @@ std::vector<std::pair<nacb::Vec3f, nacb::Image8>> ExtractColorMasks(const nacb::
   return color_images;
 }
 
-std::pair<nacb::Image8, std::vector<nacb::Vec3f> >
+std::pair<nacb::Image8, std::vector<Color3b> >
 PalettizeImage(const nacb::Image8& image) {
   std::set<int> unique_colors = GetUniqueColors(image);
   std::unordered_map<int, int> color_index;
-  std::vector<nacb::Vec3f> colors;
+  std::vector<Color3b> colors;
   for (int c : unique_colors) {
     color_index[c] = colors.size();
     colors.push_back(IndexToColor(c));
