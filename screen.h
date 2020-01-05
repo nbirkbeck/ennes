@@ -5,11 +5,10 @@
 #include <nimage/image.h>
 
 struct BackgroundGroup {
-  BackgroundGroup(const std::vector<std::pair<int, int> >& b,
-                  bool walkable_arg) : blocks(b), walkable(walkable_arg) {
-                    ComputeBounds();
-                  }
-  
+  BackgroundGroup(const std::vector<std::pair<int, int>>& b, bool walkable_arg)
+      : blocks(b), walkable(walkable_arg) {
+    ComputeBounds();
+  }
 
   nacb::Image8 ExtractImage(const nacb::Image8& image,
                             const std::map<int, int>& line_starts) const {
@@ -19,17 +18,16 @@ struct BackgroundGroup {
     const int x1 = (x0 + min_x * 8) + w;
     const int y1 = min_y * 8 + h;
     if (x1 > image.w) {
-      std::cerr << "x coordinate out of bounds, x0 = "
-                << x0 << " min_x = " << min_x
-                << " max_x = " << max_x <<  " image.w = " << image.w;
+      std::cerr << "x coordinate out of bounds, x0 = " << x0
+                << " min_x = " << min_x << " max_x = " << max_x
+                << " image.w = " << image.w;
     }
     if (y1 > image.h) {
       std::cerr << "y coordinate out of bounds, y = "
-                << " min_y = " << min_y
-                << " max_y = " << max_y <<  " image.h = " << image.h;
+                << " min_y = " << min_y << " max_y = " << max_y
+                << " image.h = " << image.h;
     }
-    return image.subimage(x0 + min_x * 8, min_y * 8,
-                          (max_x + 1 - min_x) * 8,
+    return image.subimage(x0 + min_x * 8, min_y * 8, (max_x + 1 - min_x) * 8,
                           (max_y + 1 - min_y) * 8);
   }
 
@@ -50,15 +48,10 @@ struct BackgroundGroup {
   int max_x, max_y;
   const std::vector<std::pair<int, int>> blocks;
   const bool walkable;
-
 };
 
-
-
-bool IsEdgeBackground(const nacb::Image8& im,
-                      int x, int y,
-                      const Color3b& bg_color,
-                      int dx, int dy);
+bool IsEdgeBackground(const nacb::Image8& im, int x, int y,
+                      const Color3b& bg_color, int dx, int dy);
 
 std::vector<BackgroundGroup>
 FindBackgroundGroups(nacb::Image8* image, const Color3b& bg_color,
