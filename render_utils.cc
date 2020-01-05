@@ -4,6 +4,32 @@
 #include <nimage/image.h>
 #include <string>
 
+// The name table representation contains the attribute tables. The name
+// table is 1024 bytes. The name table indices are actually 32x30 = 960
+// bytes. The remaining 1024-960=64 bytes is used to store attributes.
+// The colors are clustered into super-blocks (16x16), of which there
+// are 16x15=240. 240 * 2bits = 60 bytes. Groups of 4x4 blocks (32x32
+// pixels) are placed into a single byte. So the index into the
+// attributes is based on dividing the (x, y) coordinates by 32.
+const int GetAttributeColor(const std::string& name_table, int x, int y) {
+  const char* attributes =
+      &name_table[0] + (kNesWidth >> 3) * (kNesHeight >> 3);
+  const int sy = y >> 4;
+  const int sx = x >> 4;
+  const uint8_t attribute = attributes[((sy & ~0x1) << 2) + (sx >> 1)];
+  return (attribute >> (((sy & 0x1) << 2) + ((sx & 0x1) << 1))) & 0x3;
+}
+
+void ClearImage(nacb::Image8& image, const Color3b& color) {
+  for (int y = 0; y < image.h; ++y) {
+    for (int x = 0; x < image.w; ++x) {
+      for (int c = 0; c < 3; ++c) {
+        image(x, y, c) = color[c];
+      }
+    }
+  }
+}
+
 void DrawPattern(nacb::Image8& image, int x, int y, const std::string& palette,
                  const std::string& pattern_table, uint8_t entry, int color,
                  TransformFlags flags) {
@@ -37,25 +63,6 @@ void DrawPattern(nacb::Image8& image, int x, int y, const std::string& palette,
   }
 }
 
-const int GetAttributeColor(const std::string& name_table, int x, int y) {
-  const char* attributes =
-      &name_table[0] + (kNesWidth >> 3) * (kNesHeight >> 3);
-  const int sy = y >> 4;
-  const int sx = x >> 4;
-  const uint8_t attribute = attributes[((sy & ~0x1) << 2) + (sx >> 1)];
-  return (attribute >> (((sy & 0x1) << 2) + ((sx & 0x1) << 1))) & 0x3;
-}
-
-void ClearImage(nacb::Image8& image, const Color3b& color) {
-  for (int y = 0; y < image.h; ++y) {
-    for (int x = 0; x < image.w; ++x) {
-      for (int c = 0; c < 3; ++c) {
-        image(x, y, c) = color[c];
-      }
-    }
-  }
-}
-
 void RenderSprites(const nes::RenderState& render_state, int x_offset,
                    bool foreground, nacb::Image8* image_ptr) {
   nacb::Image8& image = *image_ptr;
@@ -82,7 +89,7 @@ RenderBackground(const nes::RenderSequence::FrameState& frame_state,
   int next_update_index = 0;
 
   std::map<int, int> line_starts;
-  for (int y = 0; y < kNesHeight; y += 8) {
+  for (int y = 0; y < kNesHeight; y += kBlockSize) {
     while (next_update_index < frame_state.state_update_size() &&
            y + 4 >=
                frame_state.state_update(next_update_index).ppu().scan_line()) {
@@ -98,6 +105,7 @@ RenderBackground(const nes::RenderSequence::FrameState& frame_state,
     {
       const std::string& name_table =
           render_state.name_table(current_state->ppu().name_table());
+      // Render all blocks even if the left would spill off the screen a bit.
       for (int x = 8 * (current_state->ppu().vscroll() / 8); x < kNesWidth;
            x += 8) {
         const int high_color_bits = GetAttributeColor(name_table, x, y);
@@ -110,6 +118,7 @@ RenderBackground(const nes::RenderSequence::FrameState& frame_state,
       }
     }
     {
+      // Any remaining rows come from the next name table
       const std::string& name_table =
           render_state.name_table((current_state->ppu().name_table() + 1) % 4);
       for (int x = 0; x <= 8 * (current_state->ppu().vscroll() / 8); x += 8) {
