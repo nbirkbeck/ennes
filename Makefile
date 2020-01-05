@@ -1,4 +1,4 @@
-LIBS = $(shell pkg-config --libs nimage nmath protobuf) -lnappear_util
+LIBS = $(shell pkg-config --libs nimage nmath protobuf) -lnappear_util -lGLEW
 .SUFFIXES = .cc .o
 INC=-I/home/birkbeck/svn/misc -I${HOME}/svn
 
@@ -8,6 +8,9 @@ all: extract_colors highres_boundary mesh_utils simple_renderer renderer
 
 extract_colors: extract_colors.cc
 	g++ ${LIBS} -DEXTRACT_COLORS_MAIN=1 extract_colors.cc -o extract_colors
+
+extract_colors_test: extract_colors_test.cc
+	g++ ${LIBS} extract_colors_test.cc extract_colors.o -lgtest -o extract_colors_test
 
 %.o: %.cc
 	g++ ${FLAGS} ${INC} -I${HOME}/code/6502  -fPIC -c $< -o $@	

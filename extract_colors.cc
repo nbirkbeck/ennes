@@ -12,7 +12,6 @@ Color3b IndexToColor(int color) {
 } // namespace
 
 int NumOverlappingColors(const std::set<int>& s1, const std::set<int>& s2) {
-
   int cnt = 0;
   for (int c : s1) {
     cnt += s2.count(c);
