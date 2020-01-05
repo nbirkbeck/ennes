@@ -1,0 +1,36 @@
+syntax = "proto2";
+
+package nes;
+
+message RenderState {
+  optional bytes image_palette = 1;
+  optional bytes sprite_palette = 2;
+
+  repeated bytes pattern_table = 3;
+  optional bytes sprite_data = 4;
+
+  repeated bytes name_table = 5;
+
+  message PPU {
+    optional int32 sprite_pattern_table = 1;
+    optional int32 screen_pattern_table = 2;
+    optional int32 sprite_8_by_16_size = 3;
+    optional int32 hit_switch = 4;
+    optional int32 vblank_switch = 5;
+    optional int32 hscroll = 6;
+    optional int32 vscroll = 7;
+    optional int32 vertical_mirror = 8;
+    optional int32 name_table = 9;
+    optional int32 scan_line = 10;
+  }
+  optional PPU ppu = 6;
+}
+
+message RenderSequence {
+  message FrameState {
+    optional RenderState start_frame = 1;
+    optional RenderState end_frame = 2;
+    repeated RenderState state_update = 3;
+  }
+  repeated FrameState frame_state = 1;
+}
