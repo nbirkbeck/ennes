@@ -1,22 +1,21 @@
 #include "mesh_utils.h"
 
-#include <nimage/image.h>
+#include "poly/cpp/delaunay.h"
 #include <levset/levset2d.h>
 #include <levset/levset3d.h>
-#include <nappear/mesh.h>
 #include <nappear/fbo.h>
+#include <nappear/mesh.h>
+#include <nimage/image.h>
 #include <nmath/vec2.h>
 #include <nmath/vec3.h>
-#include "poly/cpp/delaunay.h"
 
-#include <set>
-#include <vector>
 #include <map>
+#include <set>
 #include <unordered_map>
+#include <vector>
 
 namespace {
-nacb::Image8 GetMask(const nacb::Image8& image,
-                     const Color3b& bg_color,
+nacb::Image8 GetMask(const nacb::Image8& image, const Color3b& bg_color,
                      int num_pad = 0) {
   nacb::Image8 mask(image.w + 2 * num_pad, image.h + 2 * num_pad, 1);
   mask = 0;
@@ -26,17 +25,18 @@ nacb::Image8 GetMask(const nacb::Image8& image,
         mask(num_pad + x, num_pad + y, 0) = (image(x, y, 3) > 128) ? 255 : 0;
       } else {
         mask(num_pad + x, num_pad + y, 0) =
-          (image(x, y, 0) == bg_color.x &&
-           image(x, y, 1) == bg_color.y &&
-           image(x, y, 2) == bg_color.z) ? 0 : 255;
+            (image(x, y, 0) == bg_color.x && image(x, y, 1) == bg_color.y &&
+             image(x, y, 2) == bg_color.z)
+                ? 0
+                : 255;
       }
     }
   }
   return mask;
 }
 
-std::vector<nacb::Vec2d> RemoveNearPoints(const std::vector<nacb::Vec2d>& points,
-                                          double dist) {
+std::vector<nacb::Vec2d>
+RemoveNearPoints(const std::vector<nacb::Vec2d>& points, double dist) {
   std::vector<nacb::Vec2d> unique_points;
   for (int i = 0; i < points.size(); ++i) {
     bool found = false;
@@ -46,7 +46,8 @@ std::vector<nacb::Vec2d> RemoveNearPoints(const std::vector<nacb::Vec2d>& points
         break;
       }
     }
-    if (found) continue;
+    if (found)
+      continue;
     unique_points.push_back(points[i]);
   }
   return unique_points;
@@ -71,42 +72,43 @@ void SmoothMesh(nappear::Mesh* mesh) {
 
 double TriangleArea(const nappear::Mesh& mesh, int i) {
   double ls[3];
-  
+
   // Get the lengths
-  for(int k = 0; k < 3; k++){
+  for (int k = 0; k < 3; k++) {
     int v1 = mesh.faces[i].vi[k];
-    int v2 = mesh.faces[i].vi[(k+1)%3];
+    int v2 = mesh.faces[i].vi[(k + 1) % 3];
 
     double l = (mesh.vert[v2] - mesh.vert[v1]).len();
     ls[k] = l;
   }
-    
+
   // Semi-perimeter
-  double S = (ls[0] + ls[1] + ls[2])/2;
+  double S = (ls[0] + ls[1] + ls[2]) / 2;
 
   // Make sure semi-perimeter is bigger than all sides
   S = std::max(S, std::max(ls[0], std::max(ls[1], ls[2])));
 
-  return sqrt(S*(S - ls[0])*(S - ls[1])*(S - ls[2]));
+  return sqrt(S * (S - ls[0]) * (S - ls[1]) * (S - ls[2]));
 }
 
-std::vector<std::map<int, double>>  GetVertexNeighbors(const nappear::Mesh & mesh){
+std::vector<std::map<int, double>>
+GetVertexNeighbors(const nappear::Mesh& mesh) {
   std::vector<std::map<int, double>> vneigh(mesh.vert.size());
 
-  for (int i = 0; i < mesh.faces.size(); i++){
+  for (int i = 0; i < mesh.faces.size(); i++) {
     const double A = TriangleArea(mesh, i);
-    
-    for (int k=0; k < 3 ; k++){
-      int v1 = mesh.faces[i].vi[k];
-      int v2 = mesh.faces[i].vi[(k+1)%3];
 
-      if(!vneigh[v1].count(v2))
-	vneigh[v1][v2] = 0;
-    
+    for (int k = 0; k < 3; k++) {
+      int v1 = mesh.faces[i].vi[k];
+      int v2 = mesh.faces[i].vi[(k + 1) % 3];
+
+      if (!vneigh[v1].count(v2))
+        vneigh[v1][v2] = 0;
+
       vneigh[v1][v2] += A;
 
-      if(!vneigh[v2].count(v1))
-	vneigh[v2][v1] = 0;
+      if (!vneigh[v2].count(v1))
+        vneigh[v2][v1] = 0;
 
       vneigh[v2][v1] += A;
     }
@@ -117,7 +119,7 @@ std::vector<std::map<int, double>>  GetVertexNeighbors(const nappear::Mesh & mes
 struct blowup_options_t {
   int ntime;
   double alpha; // Controls blow-up of the mesh.
-  double beta; 
+  double beta;
   int ninner; // Number of inner iterations (to reduce strain/stretch).
 
   blowup_options_t() {
@@ -128,84 +130,85 @@ struct blowup_options_t {
   }
 };
 
-
 nappear::Mesh BlowUpMesh(const nappear::Mesh& mesh,
-                         const blowup_options_t & opts = blowup_options_t()){
+                         const blowup_options_t& opts = blowup_options_t()) {
   nappear::Mesh result;
   result = mesh;
 
   // Mesh adjacency
   std::vector<std::map<int, double>> vneigh = GetVertexNeighbors(mesh);
 
-  for (int t=0; t < opts.ntime; t++) {
+  for (int t = 0; t < opts.ntime; t++) {
     result.initNormals();
 
     // Move along normals
-    for (int i=0; i < result.vert.size(); i++)
+    for (int i = 0; i < result.vert.size(); i++)
       result.vert[i] += result.norm[i] * opts.alpha;
 
-    // Fix the lengths; this force moves the vertex in the direction that preserves lengths.
-    for (int inner=0; inner<opts.ninner; inner++) {
+    // Fix the lengths; this force moves the vertex in the direction that
+    // preserves lengths.
+    for (int inner = 0; inner < opts.ninner; inner++) {
       std::vector<nacb::Vec3d> updates = result.vert;
 
       // For each vertex, compute the displacement (area weighted average)
-      for (int i=0; i < result.vert.size(); i++) {
-	map<int, double>::iterator it(vneigh[i].begin());
-	double wsum = 0;
-	nacb::Vec3d update(0, 0, 0);
+      for (int i = 0; i < result.vert.size(); i++) {
+        map<int, double>::iterator it(vneigh[i].begin());
+        double wsum = 0;
+        nacb::Vec3d update(0, 0, 0);
 
-	// Check all neighboring vertices.
-	for(; it != vneigh[i].end(); ++it){
-	  int j = it->first;
-	  double wt = it->second;
+        // Check all neighboring vertices.
+        for (; it != vneigh[i].end(); ++it) {
+          int j = it->first;
+          double wt = it->second;
 
-	  nacb::Vec3d drest = mesh.vert[j] - mesh.vert[i];
-	  nacb::Vec3d dcur = result.vert[j] - result.vert[i];
+          nacb::Vec3d drest = mesh.vert[j] - mesh.vert[i];
+          nacb::Vec3d dcur = result.vert[j] - result.vert[i];
 
-	  double lrest = drest.len();
-	  double  lcur = dcur.len();
+          double lrest = drest.len();
+          double lcur = dcur.len();
 
-	  if(lcur > lrest)
-	    update += (dcur * ((lcur - lrest)/lcur))*0.5*opts.beta*wt;
-	  else
-	    update -= (dcur * ((lrest - lcur)/lrest))*0.5*opts.beta*wt;
+          if (lcur > lrest)
+            update += (dcur * ((lcur - lrest) / lcur)) * 0.5 * opts.beta * wt;
+          else
+            update -= (dcur * ((lrest - lcur) / lrest)) * 0.5 * opts.beta * wt;
 
-	  wsum += wt;
-	}
+          wsum += wt;
+        }
 
-	wsum = std::max(wsum, 1e-8);
-	update *= (1.0/wsum);
+        wsum = std::max(wsum, 1e-8);
+        update *= (1.0 / wsum);
 
-	updates[i] += update;
+        updates[i] += update;
       }
-      
-      result.vert = updates;      
+
+      result.vert = updates;
     }
   }
   return result;
 }
 
 bool AllWhite(const nacb::Image8& image) {
-  for (int y = 0; y <image.h;++y) {
-    for (int x = 0; x< image.w; ++x) {
-      if (!image(x, y, 0)) return false;
+  for (int y = 0; y < image.h; ++y) {
+    for (int x = 0; x < image.w; ++x) {
+      if (!image(x, y, 0))
+        return false;
     }
   }
   return true;
 }
-}  // namespace
+} // namespace
 
 nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
                                    const nacb::Image8& highres_image,
                                    const Color3b& bg_color) {
   const int num_pad_highres = 1;
-    
+
   nacb::Image8 lowres_mask = GetMask(lowres_image, bg_color);
   nacb::Imagef highres_mask = GetMask(highres_image, bg_color, num_pad_highres);
   const int factor = highres_image.w / lowres_mask.w;
 
   std::vector<nacb::Vec2d> points;
-  std::vector<std::pair<int, int> > lines;
+  std::vector<std::pair<int, int>> lines;
 
   if (AllWhite(lowres_mask)) {
     std::cout << "All white:" << lowres_mask.w << " " << lowres_mask.h;
@@ -226,13 +229,15 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
     // TODO: need to add more points to the border edges
     //  addBorderEdges(points, lines, &levelset);
     for (auto& p : points) {
-      p.x = (p.x - num_pad_highres) * double(lowres_mask.w) / (highres_mask.w - 2 * num_pad_highres);
-      p.y = (p.y - num_pad_highres) * double(lowres_mask.h) / (highres_mask.h - 2 * num_pad_highres);
+      p.x = (p.x - num_pad_highres) * double(lowres_mask.w) /
+            (highres_mask.w - 2 * num_pad_highres);
+      p.y = (p.y - num_pad_highres) * double(lowres_mask.h) /
+            (highres_mask.h - 2 * num_pad_highres);
     }
     points = RemoveNearPoints(points, 0.125);
   }
   const int num_points_border = points.size();
-  
+
   std::set<int> interior_points;
   std::set<int> exterior_points;
   double ox = 0.25;
@@ -259,7 +264,7 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
 
   // The delaunay triangulation flakes out if points are in regular grid.
   // Add some noise.
-  for (auto& p: points) {
+  for (auto& p : points) {
     p.x += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
     p.y += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
   }
@@ -279,19 +284,18 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
   }
   std::vector<nacb::Vec2d> points2;
   for (const auto& point : points) {
-    points2.push_back(nacb::Vec2d(point.x / lowres_mask.w, 1.0 - point.y / lowres_mask.h));
+    points2.push_back(
+        nacb::Vec2d(point.x / lowres_mask.w, 1.0 - point.y / lowres_mask.h));
   }
 
   mesh.tvert = points2;
   mesh.vert = points3;
-  
-  for (const auto& tri: tris) {
-    if (exterior_points.count(tri[0]) ||
-        exterior_points.count(tri[1]) ||
+
+  for (const auto& tri : tris) {
+    if (exterior_points.count(tri[0]) || exterior_points.count(tri[1]) ||
         exterior_points.count(tri[2]))
       continue;
-    if (interior_points.count(tri[0]) ||
-        interior_points.count(tri[1]) ||
+    if (interior_points.count(tri[0]) || interior_points.count(tri[1]) ||
         interior_points.count(tri[2])) {
       nappear::Mesh::Face face;
       face.vi[0] = tri[0];
@@ -313,14 +317,12 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
     }
   }
   // Add extruded edges
-  for (const auto& tri: tris) {
-    if (exterior_points.count(tri[0]) ||
-        exterior_points.count(tri[1]) ||
+  for (const auto& tri : tris) {
+    if (exterior_points.count(tri[0]) || exterior_points.count(tri[1]) ||
         exterior_points.count(tri[2]))
       continue;
 
-    if (interior_points.count(tri[0]) ||
-        interior_points.count(tri[1]) ||
+    if (interior_points.count(tri[0]) || interior_points.count(tri[1]) ||
         interior_points.count(tri[2])) {
       for (int e = 0; e < 3; ++e) {
         int v1 = tri[e];
@@ -335,9 +337,10 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
           face.tci[1] = v1;
           face.tci[2] = v1;
           mesh.faces.push_back(face);
-        
+
           face.vi[0] = v1 + num_points_keep;
-          face.vi[1] = v2 + num_points_keep;;
+          face.vi[1] = v2 + num_points_keep;
+          ;
           face.vi[2] = v2;
           face.tci[0] = v1;
           face.tci[1] = v2;
@@ -354,13 +357,12 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
   SmoothMesh(&mesh);
   SmoothMesh(&mesh);
   mesh.initNormals();
-  return BlowUpMesh(mesh);  
+  return BlowUpMesh(mesh);
 }
 
-template <class T>
-struct VecHash {
-  VecHash(const nacb::Vec3d& min_p, const nacb::Vec3d& max_p):
-    min_point(min_p), range(max_p - min_p) {}
+template <class T> struct VecHash {
+  VecHash(const nacb::Vec3d& min_p, const nacb::Vec3d& max_p)
+      : min_point(min_p), range(max_p - min_p) {}
 
   size_t operator()(const T& point) const {
     const Vec3<int> co = GetCoordinate(point);
@@ -375,17 +377,17 @@ struct VecHash {
   nacb::Vec3d GetBinCenter(const nacb::Vec3<int>& co) const {
     return nacb::Vec3d((0.5 + co.x) / 1024.0 * range.x,
                        (0.5 + co.y) / 1024.0 * range.y,
-                       (0.5 + co.z) / 1024.0 * range.z) + min_point;
+                       (0.5 + co.z) / 1024.0 * range.z) +
+           min_point;
   }
   nacb::Vec3d min_point;
   nacb::Vec3d range;
 };
 
-nappear::Mesh
-RemoveDuplicates(const std::vector<Vec3d>& points,
-                 const std::vector<Vec3d>& normals,
-                 const std::vector<gpoint3>& tri,
-                 int w, int h, int d) {
+nappear::Mesh RemoveDuplicates(const std::vector<Vec3d>& points,
+                               const std::vector<Vec3d>& normals,
+                               const std::vector<gpoint3>& tri, int w, int h,
+                               int d) {
   std::vector<Vec3d> new_points;
   std::vector<Vec3d> new_normals;
   nacb::Vec3d max_point(0, 0, 0);
@@ -397,7 +399,8 @@ RemoveDuplicates(const std::vector<Vec3d>& points,
   max_point += nacb::Vec3d(0.1, 0.1, 0.1);
 
   VecHash<nacb::Vec3d> hash(min_point, max_point);
-  std::unordered_multimap<nacb::Vec3d, int, VecHash<nacb::Vec3d> > mapper(100001, hash);
+  std::unordered_multimap<nacb::Vec3d, int, VecHash<nacb::Vec3d>> mapper(100001,
+                                                                         hash);
   std::unordered_map<int, int> index_map;
   for (int i = 0; i < points.size(); ++i) {
     const nacb::Vec3d& pt = points[i];
@@ -405,11 +408,12 @@ RemoveDuplicates(const std::vector<Vec3d>& points,
     Vec3<int> center = hash.GetCoordinate(pt);
     int checked = 0;
     auto check = [&](int dx, int dy, int dz) -> bool {
-      for (auto el = mapper.find(hash.GetBinCenter(center  + nacb::Vec3<int>(dx, dy, dz)));
-          el != mapper.end(); ++el) {
-          if ((new_points[el->second] - pt).len() < 1e-3) {
-             found = el->second;
-          }
+      for (auto el = mapper.find(
+               hash.GetBinCenter(center + nacb::Vec3<int>(dx, dy, dz)));
+           el != mapper.end(); ++el) {
+        if ((new_points[el->second] - pt).len() < 1e-3) {
+          found = el->second;
+        }
       }
       return found >= 0;
     };
@@ -424,7 +428,8 @@ RemoveDuplicates(const std::vector<Vec3d>& points,
     }
     if (found == -1) {
       auto co = hash.GetCoordinate(pt);
-      mapper.insert(std::make_pair(hash.GetBinCenter(center), new_points.size()));
+      mapper.insert(
+          std::make_pair(hash.GetBinCenter(center), new_points.size()));
       index_map[i] = new_points.size();
       new_points.push_back(pt);
       new_normals.push_back(normals[i]);
@@ -473,10 +478,12 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
     }
   }
   FullLevelSet3D levset(highres_mask3d);
-  //levset.moveAlongCurvature(); // Smoothing the levelset is problematic for small size inputs (e.g., text)
+  // levset.moveAlongCurvature(); // Smoothing the levelset is problematic for
+  // small size inputs (e.g., text)
 
   const int num_pad_sample = 2;
-  FullLevelSet3D levset_sample((lowres_mask.w + 2)* 2, (lowres_mask.h + 2) * 2, highres_mask3d.nchannels);
+  FullLevelSet3D levset_sample((lowres_mask.w + 2) * 2, (lowres_mask.h + 2) * 2,
+                               highres_mask3d.nchannels);
   assert(levset_sample.getWidth() * 4 == highres_mask.w);
   assert(levset_sample.getHeight() * 4 == highres_mask.h);
 
@@ -493,14 +500,19 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   std::vector<gpoint3> tri;
   levset_sample.getTriangles(mesh.vert, mesh.norm, tri);
   for (auto& p : mesh.vert) {
-    p.x = (p.x - num_pad_sample) * double(lowres_mask.w) / (levset_sample.getWidth() - 2 * num_pad_sample) + 2.0 / lowres_mask.w;
-    p.y = (p.y - num_pad_sample) * double(lowres_mask.h) / (levset_sample.getHeight() - 2 * num_pad_sample) + 2.0 / lowres_mask.h;
+    p.x = (p.x - num_pad_sample) * double(lowres_mask.w) /
+              (levset_sample.getWidth() - 2 * num_pad_sample) +
+          2.0 / lowres_mask.w;
+    p.y = (p.y - num_pad_sample) * double(lowres_mask.h) /
+              (levset_sample.getHeight() - 2 * num_pad_sample) +
+          2.0 / lowres_mask.h;
     p.z = p.z - 3;
   }
-         
-  mesh = RemoveDuplicates(mesh.vert, mesh.norm, tri, lowres_mask.w, lowres_mask.h, 7);
 
-  const bool small_image = lowres_image.w <=8 || lowres_image.h <= 8;
+  mesh = RemoveDuplicates(mesh.vert, mesh.norm, tri, lowres_mask.w,
+                          lowres_mask.h, 7);
+
+  const bool small_image = lowres_image.w <= 8 || lowres_image.h <= 8;
   SmoothMesh(&mesh);
   mesh.initNormals();
 
@@ -525,12 +537,11 @@ int main(int ac, char* av[]) {
     std::cerr << "Unable to read highres image from:" << av[2] << std::endl;
     return -1;
   }
-  Color3b bg_color(lowres_image(0, 0, 0),
-                   lowres_image(0, 0, 1),
+  Color3b bg_color(lowres_image(0, 0, 0), lowres_image(0, 0, 1),
                    lowres_image(0, 0, 2));
   auto mesh = CreateMeshFromImages3D(lowres_image, highres_image, bg_color);
   mesh.saveObj("/tmp/mesh_utils.obj");
-  
+
   return 0;
 }
 #endif
