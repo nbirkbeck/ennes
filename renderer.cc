@@ -1,5 +1,7 @@
-#include <GL/gl.h>
+// clang-format off
 #include <GL/glew.h>
+#include <GL/gl.h>
+// clang-format on
 
 #include "highres_boundary.h"
 #include "mesh_utils.h"
