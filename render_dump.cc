@@ -1,12 +1,13 @@
-#include <nimage/image.h>
 #include "plugins/render_hook.h"
-#include <iostream>
 #include "proto/render_state.pb.h"
+#include <iostream>
+#include <nimage/image.h>
 
 bool SaveRenderState(const RenderState& render_state, std::string* data) {
   int offset = 0;
   size_t state_size = 4 + kPaletteSize * 2 + kPatternTableSize * 2 +
-    kSpriteDataSize + kNameTableSize * 4 + sizeof(RenderState::PPUState);
+                      kSpriteDataSize + kNameTableSize * 4 +
+                      sizeof(RenderState::PPUState);
   *data = std::string(state_size, 0);
   memcpy(&data[0], "NES0", 4);
   offset += 4;
@@ -14,7 +15,7 @@ bool SaveRenderState(const RenderState& render_state, std::string* data) {
   offset += kPaletteSize;
   memcpy(&data[offset], render_state.sprite_palette, kPaletteSize);
   offset += kPaletteSize;
- 
+
   for (int i = 0; i < 2; ++i) {
     memcpy(&data[offset], render_state.pattern_tables[i], kPatternTableSize);
     offset += kPatternTableSize;
@@ -32,20 +33,22 @@ bool SaveRenderState(const RenderState& render_state, std::string* data) {
   return true;
 }
 
-bool ConvertState(const RenderState& render_state, nes::RenderState* nes_state, bool copy_data = true) {
+bool ConvertState(const RenderState& render_state, nes::RenderState* nes_state,
+                  bool copy_data = true) {
   if (copy_data) {
     nes_state->set_image_palette(render_state.image_palette, kPaletteSize);
     nes_state->set_sprite_palette(render_state.sprite_palette, kPaletteSize);
     for (int i = 0; i < 2; ++i) {
-      nes_state->add_pattern_table(render_state.pattern_tables[i], kPatternTableSize);
+      nes_state->add_pattern_table(render_state.pattern_tables[i],
+                                   kPatternTableSize);
     }
     nes_state->set_sprite_data(render_state.sprite_data, kSpriteDataSize);
-    
+
     for (int i = 0; i < 4; ++i) {
       nes_state->add_name_table(render_state.name_tables[i], kNameTableSize);
     }
   }
-  
+
   auto* ppu = nes_state->mutable_ppu();
   ppu->set_sprite_pattern_table(render_state.ppu.sprite_pattern_table);
   ppu->set_screen_pattern_table(render_state.ppu.screen_pattern_table);
@@ -68,12 +71,14 @@ public:
   }
 
   void StateUpdate(const RenderState& render_state) override {
-    auto* frame_state = sequence_.mutable_frame_state(sequence_.frame_state_size() - 1);
+    auto* frame_state =
+        sequence_.mutable_frame_state(sequence_.frame_state_size() - 1);
     ConvertState(render_state, frame_state->add_state_update(), false);
   }
 
   void EndFrame(const RenderState& render_state) override {
-    auto* frame_state = sequence_.mutable_frame_state(sequence_.frame_state_size() - 1);
+    auto* frame_state =
+        sequence_.mutable_frame_state(sequence_.frame_state_size() - 1);
     ConvertState(render_state, frame_state->mutable_end_frame());
   }
 
@@ -100,14 +105,11 @@ public:
     frame_++;
   }
 
-  bool WantRenderedFrame() override {
-    return true;
-  }
+  bool WantRenderedFrame() override { return true; }
 
   int frame_ = 0;
   nes::RenderSequence sequence_;
 };
-
 
 static RenderHook* render_hook = 0;
 

@@ -16,9 +16,9 @@ typedef nacb::Vec3<uint8_t> Color3b;
 extern Color3b kNesPalette[64];
 
 enum TransformFlags {
-   FLIP_NONE = 0,
-   FLIP_HORIZONTAL = 1,
-   FLIP_VERTICAL = 2,
+  FLIP_NONE = 0,
+  FLIP_HORIZONTAL = 1,
+  FLIP_VERTICAL = 2,
 };
 
 #endif
