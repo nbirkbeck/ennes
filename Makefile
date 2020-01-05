@@ -10,7 +10,10 @@ extract_colors: extract_colors.cc
 	g++ ${LIBS} -DEXTRACT_COLORS_MAIN=1 extract_colors.cc -o extract_colors
 
 extract_colors_test: extract_colors_test.cc
-	g++ ${LIBS} extract_colors_test.cc extract_colors.o -lgtest -o extract_colors_test
+	g++ ${LIBS} extract_colors_test.cc extract_colors.o -lgtest -o $@
+
+highres_boundary_test: highres_boundary_test.cc
+	g++ ${LIBS} highres_boundary_test.cc highres_boundary.o extract_colors.o -lgtest -o $@
 
 %.o: %.cc
 	g++ ${FLAGS} ${INC} -I${HOME}/code/6502  -fPIC -c $< -o $@	

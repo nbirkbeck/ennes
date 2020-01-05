@@ -8,8 +8,7 @@
 namespace {
 nacb::Imagef GaussianFilter(const nacb::Imagef& upsampled, double filter_sigma,
                             int filter_half_size) {
-  nacb::Imagef filter(filter_half_size * 2 + 1, 1,
-                      1); // 2 * filter_half_size + 1, 1);
+  nacb::Imagef filter(filter_half_size * 2 + 1, 1, 1);
   double filter_sum = 0;
   for (int i = 0; i < filter.w; ++i) {
     double x = i - (filter.w / 2.0);
@@ -66,6 +65,7 @@ nacb::Imagef HighresBoundarySimple(const nacb::Image8& image,
 }
 
 // There is lots of hacking in here, and it is not clear that it really helped.
+namespace {
 nacb::Imagef HighresBoundary(const nacb::Image8& image, const int factor) {
   nacb::Imagef upsampled;
   upsampled = image.resize(image.w * factor, image.h * factor);
@@ -174,6 +174,7 @@ nacb::Imagef HighresBoundary(const nacb::Image8& image, const int factor) {
   (upsampled > 0.5).write("/tmp/upsampled_thresh.png");
   return smoothed;
 }
+} // namespace
 
 nacb::Imagef HighresBoundaryBinary(
     const nacb::Image8& image,
