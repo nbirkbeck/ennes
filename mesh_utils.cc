@@ -15,10 +15,12 @@
 #include <vector>
 
 namespace {
+// Get a mask from the image using the alpha channel (if exists) or by
+// using the background color otherwise.
 nacb::Image8 GetMask(const nacb::Image8& image, const Color3b& bg_color,
                      int num_pad = 0) {
   nacb::Image8 mask(image.w + 2 * num_pad, image.h + 2 * num_pad, 1);
-  mask = 0;
+  mask = 0; // TODO(efficiency)
   for (int y = 0; y < image.h; ++y) {
     for (int x = 0; x < image.w; ++x) {
       if (image.nchannels == 4) {
@@ -35,6 +37,7 @@ nacb::Image8 GetMask(const nacb::Image8& image, const Color3b& bg_color,
   return mask;
 }
 
+// O(n^2) removal of similar points within the same distance.
 std::vector<nacb::Vec2d>
 RemoveNearPoints(const std::vector<nacb::Vec2d>& points, double dist) {
   std::vector<nacb::Vec2d> unique_points;
@@ -75,11 +78,10 @@ double TriangleArea(const nappear::Mesh& mesh, int i) {
 
   // Get the lengths
   for (int k = 0; k < 3; k++) {
-    int v1 = mesh.faces[i].vi[k];
-    int v2 = mesh.faces[i].vi[(k + 1) % 3];
+    const int v1 = mesh.faces[i].vi[k];
+    const int v2 = mesh.faces[i].vi[(k + 1) % 3];
 
-    double l = (mesh.vert[v2] - mesh.vert[v1]).len();
-    ls[k] = l;
+    ls[k] = (mesh.vert[v2] - mesh.vert[v1]).len();
   }
 
   // Semi-perimeter
@@ -99,8 +101,8 @@ GetVertexNeighbors(const nappear::Mesh& mesh) {
     const double A = TriangleArea(mesh, i);
 
     for (int k = 0; k < 3; k++) {
-      int v1 = mesh.faces[i].vi[k];
-      int v2 = mesh.faces[i].vi[(k + 1) % 3];
+      const int v1 = mesh.faces[i].vi[k];
+      const int v2 = mesh.faces[i].vi[(k + 1) % 3];
 
       if (!vneigh[v1].count(v2))
         vneigh[v1][v2] = 0;
@@ -116,22 +118,8 @@ GetVertexNeighbors(const nappear::Mesh& mesh) {
   return vneigh;
 }
 
-struct blowup_options_t {
-  int ntime;
-  double alpha; // Controls blow-up of the mesh.
-  double beta;
-  int ninner; // Number of inner iterations (to reduce strain/stretch).
-
-  blowup_options_t() {
-    ntime = 30;
-    alpha = 0.1;
-    beta = 1.0;
-    ninner = 15;
-  }
-};
-
 nappear::Mesh BlowUpMesh(const nappear::Mesh& mesh,
-                         const blowup_options_t& opts = blowup_options_t()) {
+                         const BlowUpOptions& opts = BlowUpOptions()) {
   nappear::Mesh result;
   result = mesh;
 
@@ -161,11 +149,11 @@ nappear::Mesh BlowUpMesh(const nappear::Mesh& mesh,
           int j = it->first;
           double wt = it->second;
 
-          nacb::Vec3d drest = mesh.vert[j] - mesh.vert[i];
-          nacb::Vec3d dcur = result.vert[j] - result.vert[i];
+          const nacb::Vec3d drest = mesh.vert[j] - mesh.vert[i];
+          const nacb::Vec3d dcur = result.vert[j] - result.vert[i];
 
-          double lrest = drest.len();
-          double lcur = dcur.len();
+          const double lrest = drest.len();
+          const double lcur = dcur.len();
 
           if (lcur > lrest)
             update += (dcur * ((lcur - lrest) / lcur)) * 0.5 * opts.beta * wt;
@@ -200,7 +188,8 @@ bool AllWhite(const nacb::Image8& image) {
 
 nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
                                    const nacb::Image8& highres_image,
-                                   const Color3b& bg_color) {
+                                   const Color3b& bg_color,
+                                   const BlowUpOptions& opts) {
   const int num_pad_highres = 1;
 
   nacb::Image8 lowres_mask = GetMask(lowres_image, bg_color);
@@ -316,7 +305,7 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
       mesh.faces.push_back(face);
     }
   }
-  // Add extruded edges
+  // Add extruded edges (should use edges that don't have a pair)
   for (const auto& tri : tris) {
     if (exterior_points.count(tri[0]) || exterior_points.count(tri[1]) ||
         exterior_points.count(tri[2]))
@@ -357,7 +346,7 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
   SmoothMesh(&mesh);
   SmoothMesh(&mesh);
   mesh.initNormals();
-  return BlowUpMesh(mesh);
+  return BlowUpMesh(mesh, opts);
 }
 
 template <class T> struct VecHash {
@@ -461,7 +450,8 @@ nappear::Mesh RemoveDuplicates(const std::vector<Vec3d>& points,
 
 nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
                                      const nacb::Image8& highres_image,
-                                     const Color3b& bg_color) {
+                                     const Color3b& bg_color,
+                                     const BlowUpOptions& opts) {
   const int factor = highres_image.w / lowres_image.w;
   const int num_pad_highres = factor;
 
@@ -469,7 +459,7 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   nacb::Image8 highres_mask = GetMask(highres_image, bg_color, num_pad_highres);
 
   nacb::Image8 highres_mask3d(highres_mask.w, highres_mask.h, 7);
-  highres_mask3d = 0;
+  highres_mask3d = 0; // TODO(efficiency)
   for (int z = 2; z < highres_mask3d.nchannels - 2; ++z) {
     for (int y = 0; y < highres_mask.h; ++y) {
       for (int x = 0; x < highres_mask.w; ++x) {
@@ -512,35 +502,69 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   mesh = RemoveDuplicates(mesh.vert, mesh.norm, tri, lowres_mask.w,
                           lowres_mask.h, 7);
 
-  const bool small_image = lowres_image.w <= 8 || lowres_image.h <= 8;
+  // const bool small_image = lowres_image.w <= 8 || lowres_image.h <= 8;
   SmoothMesh(&mesh);
   mesh.initNormals();
 
-  blowup_options_t opts;
-  opts.alpha = small_image ? 0.07 : 0.185;
+  /*opts.alpha = small_image ? 0.07 : 0.185;
   opts.ntime = small_image ? 10 : 20;
   opts.alpha += 0.3;
   opts.beta += 2;
+  */
   return BlowUpMesh(mesh, opts);
 }
 
 #ifdef MESH_UTILS_MAIN
+#include <nmisc/commandline.h>
 int main(int ac, char* av[]) {
+  int use_3d = 1;
+  std::string lowres_path, highres_path,
+      output_mesh_path = "/tmp/mesh_utils.obj";
+
+  BlowUpOptions opts;
+
+  nacb::CommandLine cline;
+  cline.registerOption("lowres_path", "Low res image", &lowres_path);
+  cline.registerOption("highres_path", "Highres image", &highres_path);
+  cline.registerOption("output_mesh_path", "Path to the output mesh",
+                       &output_mesh_path);
+  cline.registerOption("use_3d", "Use the 3d option", &use_3d);
+
+  cline.registerOption("ntime", "Number of time iterations (blow-up)",
+                       &opts.ntime);
+  cline.registerOption(
+      "alpha", "(Blow-up) parameter, higher means more blow-up", &opts.alpha);
+  cline.registerOption("beta",
+                       "(Blow-up) parameter, highers means preserve structure",
+                       &opts.beta);
+  cline.registerOption(
+      "ninner", "(Blow-up) parameter, inner structure preserving iterations",
+      &opts.ninner);
+
+  cline.parse(ac, av);
+
   nacb::Image8 lowres_image;
   nacb::Image8 highres_image;
 
-  if (!lowres_image.read(av[1])) {
-    std::cerr << "Unable to read lowres image from:" << av[1] << std::endl;
+  if (!lowres_image.read(lowres_path.c_str())) {
+    std::cerr << "Unable to read lowres image from:" << lowres_path
+              << std::endl;
     return -1;
   }
-  if (!highres_image.read(av[2])) {
-    std::cerr << "Unable to read highres image from:" << av[2] << std::endl;
+  if (!highres_image.read(highres_path.c_str())) {
+    std::cerr << "Unable to read highres image from:" << highres_path
+              << std::endl;
     return -1;
   }
-  Color3b bg_color(lowres_image(0, 0, 0), lowres_image(0, 0, 1),
-                   lowres_image(0, 0, 2));
-  auto mesh = CreateMeshFromImages3D(lowres_image, highres_image, bg_color);
-  mesh.saveObj("/tmp/mesh_utils.obj");
+  const Color3b bg_color(lowres_image(0, 0, 0), lowres_image(0, 0, 1),
+                         lowres_image(0, 0, 2));
+  nappear::Mesh mesh;
+  if (use_3d) {
+    mesh = CreateMeshFromImages3D(lowres_image, highres_image, bg_color, opts);
+  } else {
+    mesh = CreateMeshFromImages(lowres_image, highres_image, bg_color, opts);
+  }
+  mesh.saveObj(output_mesh_path.c_str());
 
   return 0;
 }
