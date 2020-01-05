@@ -1,3 +1,7 @@
+// This is an image-based renderer used for development and debugging.
+// Will output renders of the frame, sprites, and background for each
+// frame.
+
 #include "proto/render_state.pb.h"
 
 #include "nes.h"
@@ -12,6 +16,7 @@
 #include <nimage/image.h>
 #include <nmisc/commandline.h>
 
+// Annotate the image with some information extracted from the background groups.
 void AnnotateImage(nacb::Image8* image, int x0,
                    const std::vector<BackgroundGroup>& bg_groups) {
   for (const auto& group : bg_groups) {
@@ -30,11 +35,6 @@ void AnnotateImage(nacb::Image8* image, int x0,
             (*image)(x + b.first * 8 + x0, y + b.second * 8, 0) /= 2;
             (*image)(x + b.first * 8 + x0, y + b.second * 8, 2) /= 2;
           }
-          /*
-            (*image)(x + b.first*8 + x0, y + b.second*8, 0) = gi * 16;
-            (*image)(x + b.first*8 + x0, y + b.second*8, 1) = 255 - gi * 16;
-            (*image)(x + b.first*8 + x0, y + b.second*8, 2) /= 2;
-          */
         }
       }
     }
@@ -50,7 +50,7 @@ nacb::Image8 RenderFrame(const nes::RenderSequence::FrameState& frame_state,
   nacb::Image8 image(kNesWidth + (kBlockAligned ? 16 : 0), kNesHeight, 3);
   ClearImage(image, kNesPalette[render_state.image_palette()[0]]);
 
-  // FIXME: This is a hack for SMB1.
+  // FIXME: This is a hack for SMB1 (don't need, should set during export of data)
   render_state.mutable_ppu()->set_name_table(0);
 
   RenderSprites(render_state, kBlockAligned ? 8 : 0, /*foreground=*/false,

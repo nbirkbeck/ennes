@@ -1,37 +1,11 @@
+// This is a plugin for the nes emulator that allows us to extract some state
+// For example:
+//  ./a.out --smb1_hack=1 --render_hook ~/Desktop/ennes/nes/render_dump.so smb1.nes
+
 #include "plugins/render_hook.h"
 #include "proto/render_state.pb.h"
 #include <iostream>
 #include <nimage/image.h>
-
-bool SaveRenderState(const RenderState& render_state, std::string* data) {
-  int offset = 0;
-  size_t state_size = 4 + kPaletteSize * 2 + kPatternTableSize * 2 +
-                      kSpriteDataSize + kNameTableSize * 4 +
-                      sizeof(RenderState::PPUState);
-  *data = std::string(state_size, 0);
-  memcpy(&data[0], "NES0", 4);
-  offset += 4;
-  memcpy(&data[offset], render_state.image_palette, kPaletteSize);
-  offset += kPaletteSize;
-  memcpy(&data[offset], render_state.sprite_palette, kPaletteSize);
-  offset += kPaletteSize;
-
-  for (int i = 0; i < 2; ++i) {
-    memcpy(&data[offset], render_state.pattern_tables[i], kPatternTableSize);
-    offset += kPatternTableSize;
-  }
-  memcpy(&data[offset], render_state.sprite_data, kSpriteDataSize);
-  offset += kSpriteDataSize;
-
-  for (int i = 0; i < 4; ++i) {
-    memcpy(&data[offset], render_state.name_tables[i], kNameTableSize);
-    offset += kSpriteDataSize;
-  }
-
-  memcpy(&data[offset], &render_state.ppu, sizeof(render_state.ppu));
-  offset += sizeof(render_state.ppu);
-  return true;
-}
 
 bool ConvertState(const RenderState& render_state, nes::RenderState* nes_state,
                   bool copy_data = true) {
