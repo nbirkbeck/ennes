@@ -14,7 +14,7 @@
 #include <map>
 #include <unordered_map>
 
-
+namespace {
 nacb::Image8 GetMask(const nacb::Image8& image,
                      const Color3b& bg_color,
                      int num_pad = 0) {
@@ -90,7 +90,6 @@ double TriangleArea(const nappear::Mesh& mesh, int i) {
   return sqrt(S*(S - ls[0])*(S - ls[1])*(S - ls[2]));
 }
 
-
 std::vector<std::map<int, double>>  GetVertexNeighbors(const nappear::Mesh & mesh){
   std::vector<std::map<int, double>> vneigh(mesh.vert.size());
 
@@ -114,7 +113,6 @@ std::vector<std::map<int, double>>  GetVertexNeighbors(const nappear::Mesh & mes
   }
   return vneigh;
 }
-
 
 struct blowup_options_t {
   int ntime;
@@ -195,6 +193,7 @@ bool AllWhite(const nacb::Image8& image) {
   }
   return true;
 }
+}  // namespace
 
 nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
                                    const nacb::Image8& highres_image,
@@ -220,6 +219,7 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
     }
   } else {
     FullLevelSet2D levelset(highres_mask, 1.0, 1.0);
+
     // These points kind of suck.
     levelset.getLines(points, lines);
 
@@ -257,6 +257,8 @@ nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
     }
   }
 
+  // The delaunay triangulation flakes out if points are in regular grid.
+  // Add some noise.
   for (auto& p: points) {
     p.x += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
     p.y += 0.1 * ((double(rand()) / RAND_MAX) - 0.5);
@@ -449,7 +451,6 @@ RemoveDuplicates(const std::vector<Vec3d>& points,
     face.ni[2] = index_map[t.z];
     mesh.faces.push_back(face);
   }
-  std::cout << "points.size() = " << points.size() << " " << new_points.size();
   return mesh;
 }
 
@@ -472,12 +473,14 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
     }
   }
   FullLevelSet3D levset(highres_mask3d);
-  //levset.moveAlongCurvature();
+  //levset.moveAlongCurvature(); // Smoothing the levelset is problematic for small size inputs (e.g., text)
 
   const int num_pad_sample = 2;
   FullLevelSet3D levset_sample((lowres_mask.w + 2)* 2, (lowres_mask.h + 2) * 2, highres_mask3d.nchannels);
   assert(levset_sample.getWidth() * 4 == highres_mask.w);
   assert(levset_sample.getHeight() * 4 == highres_mask.h);
+
+  // The offsets here are very hack and require an upsample factor of 8
   for (int z = 0; z < highres_mask3d.nchannels; ++z) {
     for (int y = 0; y < highres_mask.h; ++y) {
       for (int x = 0; x < highres_mask.w; ++x) {

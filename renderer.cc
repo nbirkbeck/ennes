@@ -252,13 +252,21 @@ public:
     glDisable(GL_ALPHA_TEST);
     fov = 55;
     farPlane = 10.0;
-    fbo_= std::make_unique<nappear::FrameBufferObject>(512, 512);
+    fbo_= std::make_unique<nappear::FrameBufferObject>(1024, 1024);
 
     glGenTextures(2, cube_tex_);
     for (int i = 0; i < 2; ++i) {
       glBindTexture(GL_TEXTURE_2D, cube_tex_[i]);
-      nacb::Image8 im(512, 512, 4);
-      im.initTexture();
+      if (i == 0) {
+        nacb::Image8 im(fbo_->getWidth(), fbo_->getHeight(), 4);
+        im.initTexture();
+
+      } else {
+        nacb::Imagef imf(fbo_->getWidth(), fbo_->getHeight(), 1);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_DEPTH_COMPONENT32,               
+                     fbo_->getWidth(),fbo_->getHeight(),0,GL_DEPTH_COMPONENT,
+                     GL_FLOAT,imf.data);
+      }
     }
     std::cout << "texture:" << background_tex_ << " " << fbo_->getColorTexture();
   }
@@ -279,7 +287,7 @@ public:
     ClearImage(image, kNesPalette[render_state.image_palette()[0]]);
 
     // FIXME: This is a hack for SMB1.
-    render_state.mutable_ppu()->set_name_table(0);
+    //render_state.mutable_ppu()->set_name_table(0);
 
     nacb::Timer timer;
     std::map<int, int> line_starts = RenderBackground(frame_state, kBlockAligned ? 8 : 0, &image);
@@ -392,8 +400,19 @@ public:
   }
 
   void DrawBackground() {
+    glActiveTexture(GL_TEXTURE1);
+    bool tex1_on = glIsEnabled(GL_TEXTURE_2D);
+    glDisable(GL_TEXTURE_2D);
+ 
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, background_tex_);
     background_mesh_.draw();
+
+    if (tex1_on) {
+      glActiveTexture(GL_TEXTURE1);
+      glEnable(GL_TEXTURE_2D);
+      glActiveTexture(GL_TEXTURE0);
+    }
   }
 
 
@@ -415,6 +434,9 @@ public:
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, tex);
 
+    //glDisable(GL_LIGHTING);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    
     float m[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}};
     glTexGenfv(GL_S, GL_EYE_PLANE, m[0]);
     glTexGenfv(GL_T, GL_EYE_PLANE, m[1]);
@@ -483,7 +505,7 @@ public:
       DrawContainingCube(cube_tex);
     }
   }
-
+  /*
   virtual void draw(){
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -491,13 +513,104 @@ public:
     glLoadIdentity();
     applyProjection();
 
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    applyModelview();
-
-    drawScene();
-
     swapBuffers();
+  }
+  */
+
+  void SetShadowMatrix(bool projection) {
+    if (projection) {
+      gluPerspective(40, 1, 5, 10);
+    } else {
+      glTranslatef(0, 0, -8);
+      glRotatef(30, 1, 0, 0);
+    }
+  }
+
+  void DrawShadow() {
+    
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    SetShadowMatrix(true);
+
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    SetShadowMatrix(false);
+    
+    fbo_->bind(true);
+    glViewport(0, 0, fbo_->getWidth(), fbo_->getHeight());
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glPolygonOffset(1.6, 8);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    DrawSceneInternal(false, false);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+
+    glBindTexture(GL_TEXTURE_2D, cube_tex_[1]);
+    glCopyTexSubImage2D(GL_TEXTURE_2D,0,
+                        0,0,0,0,fbo_->getWidth(), fbo_->getHeight());
+    
+    fbo_->bind(false);
+    
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+
+    glMatrixMode(GL_MODELVIEW);
+    glPopMatrix();
+
+    glViewport(0, 0, 1920, 1080);
+  }
+
+  void SetupShadowCoords() {
+    glActiveTexture(GL_TEXTURE0 + 1);
+    glEnable(GL_TEXTURE_2D);
+
+    glBindTexture(GL_TEXTURE_2D, cube_tex_[1]);
+    glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_COMPARE_MODE,GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+
+    float m[4][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}};
+    glTexGenfv(GL_S, GL_EYE_PLANE, m[0]);
+    glTexGenfv(GL_T, GL_EYE_PLANE, m[1]);
+    glTexGenfv(GL_R, GL_EYE_PLANE, m[2]);
+    glTexGenfv(GL_Q, GL_EYE_PLANE, m[3]);
+
+    glTexGenf(GL_S, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+    glTexGenf(GL_T, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+    glTexGenf(GL_R, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+    glTexGenf(GL_Q, GL_TEXTURE_GEN_MODE, GL_EYE_LINEAR);
+
+    glMatrixMode(GL_TEXTURE);
+    glLoadIdentity();
+
+    glTranslatef(0.5, 0.5, 0.5);
+    glScalef(0.5, 0.5, 0.5);
+    SetShadowMatrix(true);
+    SetShadowMatrix(false);
+
+    glEnable(GL_TEXTURE_GEN_S);
+    glEnable(GL_TEXTURE_GEN_T);
+    glEnable(GL_TEXTURE_GEN_R);
+    glEnable(GL_TEXTURE_GEN_Q);
+        
+    glActiveTexture(GL_TEXTURE0);
+    glMatrixMode(GL_MODELVIEW);
+  }
+
+  void DisableShadowCoords() {
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_TEXTURE_GEN_S);
+    glDisable(GL_TEXTURE_GEN_T);
+    glDisable(GL_TEXTURE_GEN_R);
+    glDisable(GL_TEXTURE_GEN_Q);
+
+    glActiveTexture(GL_TEXTURE0);
   }
   
   void drawScene() override {
@@ -508,7 +621,7 @@ public:
         fbo_->useColorTexture(cube_tex_[j]);
         glDisable(GL_DEPTH_TEST);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glViewport(0, 0, 512, 512);
+        glViewport(0, 0, fbo_->getWidth(), fbo_->getHeight());
 
         double planes[4][2] = {
                                {0, -16.0/9},
@@ -541,8 +654,14 @@ public:
       glViewport(0, 0, 1920, 1080);
     }
 
+    DrawShadow();
+    std::cout << fbo_->getColorTexture() << " " << fbo_->getDepthTexture() << std::endl;
+
+    SetupShadowCoords();
     
     DrawSceneInternal(true,  cube_tex_[0]); // fbo_->getColorTexture());
+
+    DisableShadowCoords();
     
     if (follow_) {
       cpos = cpos * 0.95 + 0.05*nacb::Vec3d(16.0/9.0*(2 * sprite_pos_.x / kNesWidth - 1),
