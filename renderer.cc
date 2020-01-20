@@ -379,6 +379,9 @@ public:
     case 'F':
       follow_ = true;
       break;
+    case 'w':
+      write_ = !write_;
+      break;
     case 's':
       SaveCache();
       break;
@@ -667,8 +670,6 @@ public:
     }
 
     DrawShadow();
-    std::cout << fbo_->getColorTexture() << " " << fbo_->getDepthTexture()
-              << std::endl;
 
     SetupShadowCoords();
 
@@ -687,6 +688,15 @@ public:
     frame_number_++;
     if (frame_number_ >= sequence_.frame_state_size()) {
       frame_number_ = 0;
+    }
+    if (write_) {
+      static int num = 0;
+      char fname[1024];
+      nacb::Image8 frame(1920, 1080, 3);
+      snprintf(fname, sizeof(fname), "/tmp/render3d-%04d.png", num);
+      glReadPixels(0, 0, 1920, 1080, GL_RGB, GL_UNSIGNED_BYTE, frame.data);
+      frame.flip().save(fname);
+      num++;
     }
   }
 
@@ -758,6 +768,7 @@ public:
   }
 
   int frame_number_ = 0;
+  bool write_ = false;
   bool flip_ = false;
   bool follow_ = false;
   nappear::Mesh background_mesh_;

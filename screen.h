@@ -17,16 +17,8 @@ struct BackgroundGroup {
     int h = (max_y + 1 - min_y) * 8;
     const int x1 = (x0 + min_x * 8) + w;
     const int y1 = min_y * 8 + h;
-    if (x1 > image.w) {
-      std::cerr << "x coordinate out of bounds, x0 = " << x0
-                << " min_x = " << min_x << " max_x = " << max_x
-                << " image.w = " << image.w;
-    }
-    if (y1 > image.h) {
-      std::cerr << "y coordinate out of bounds, y = "
-                << " min_y = " << min_y << " max_y = " << max_y
-                << " image.h = " << image.h;
-    }
+    assert(x1 <= image.w);
+    assert(y1 <= image.h);
     return image.subimage(x0 + min_x * 8, min_y * 8, (max_x + 1 - min_x) * 8,
                           (max_y + 1 - min_y) * 8);
   }

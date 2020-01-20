@@ -32,7 +32,7 @@ simple_renderer: ${SIMPLE_RENDER_OBJS}
 	g++ ${FLAGS} ${LIBS} ${SIMPLE_RENDER_OBJS} -o simple_renderer 
 
 mesh_utils: mesh_utils.cc
-	g++ ${FLAGS} mesh_utils.cc -DMESH_UTILS_MAIN=1 ${LIBS} $(shell pkg-config --libs levset) ~/svn/misc/poly/cpp/delaunay.o	-I/home/birkbeck/svn/misc -o mesh_utils
+	g++ ${INC} ${FLAGS} mesh_utils.cc -DMESH_UTILS_MAIN=1 ${LIBS} $(shell pkg-config --libs levset) ~/svn/misc/poly/cpp/delaunay.o  -I/home/birkbeck/svn/misc -o mesh_utils
 
 RENDER_OBJS = renderer.o proto/render_state.pb.o render_utils.o sprite.o extract_colors.o highres_boundary.o mesh_utils.o screen.o nes.o
 renderer: ${RENDER_OBJS}
