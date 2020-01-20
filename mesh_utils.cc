@@ -3,13 +3,12 @@
 #include "poly/cpp/delaunay.h"
 #include <levset/levset2d.h>
 #include <levset/levset3d.h>
+#include <map>
 #include <nappear/fbo.h>
 #include <nappear/mesh.h>
 #include <nimage/image.h>
 #include <nmath/vec2.h>
 #include <nmath/vec3.h>
-
-#include <map>
 #include <set>
 #include <unordered_map>
 #include <vector>
@@ -184,6 +183,130 @@ bool AllWhite(const nacb::Image8& image) {
   }
   return true;
 }
+
+typedef map<int, double> vertex_neigh_t;
+
+// FIXME: this was copied from bone_weights.
+//       bone_weights should be fixed to
+template <class T1, class T2>
+vector<vertex_neigh_t> mesh_laplacian(const std::vector<Vec3<T1>>& vert,
+                                      const std::vector<T2>& tris) {
+  int nvert = vert.size();
+  int ntris = tris.size();
+
+  std::vector<vertex_neigh_t> vneigh(nvert);
+  std::vector<double> A(nvert, 0);
+
+  for (int i = 0; i < ntris; i++) {
+    for (int k = 0; k < 3; k++) {
+      int i1 = tris[i].vi[k];
+      int i2 = tris[i].vi[(k + 1) % 3];
+
+      if (!vneigh[i1].count(i2))
+        vneigh[i1][i2] = 0.0;
+      if (!vneigh[i2].count(i1))
+        vneigh[i2][i1] = 0.0;
+    }
+  }
+
+  for (int i = 0; i < ntris; i++) {
+    int vs[3] = {tris[i].vi[0], tris[i].vi[1], tris[i].vi[2]};
+    Vec3d es[3] = {vert[vs[1]] - vert[vs[0]], vert[vs[2]] - vert[vs[1]],
+                   vert[vs[0]] - vert[vs[2]]};
+    double lens[3];
+    for (int k = 0; k < 3; k++)
+      lens[k] = es[k].normalize();
+
+    double cts[3] = {-es[0].dot(es[2]), -es[0].dot(es[1]), -es[1].dot(es[2])};
+    double S = (lens[0] + lens[1] + lens[2]) / 2.0;
+    double At = sqrt(S * (S - lens[0]) * (S - lens[1]) * (S - lens[2]));
+    bool obtuse = (cts[0] < 0 || cts[1] < 0 || cts[2] < 0);
+
+    for (int k = 0; k < 3; k++) {
+      // sometimes the cos^2 was greater than 1 causing s to be nan
+      double s = sqrt(1.0 - std::min(cts[(k + 2) % 3] * cts[(k + 2) % 3], 1.0));
+      // This means the triangle is a little tiny sliver
+      if (s < 1e-12)
+        s = 1e-12;
+
+#warning These weights were sometimes negative (I see no reason for this).  abs fixed problems in arap_deform (some meshes were getting bunched up).  These meshes were the ones with large negative values in the laplacian matrix.  Make sure skinning works!
+      double cot = fabs(cts[(k + 2) % 3] / s); // fabs????
+
+      if (obtuse) {
+        if (cts[k] < 0)
+          A[vs[k]] += At / 2.;
+        else
+          A[vs[k]] += At / 4.;
+
+        if (cts[(k + 1) % 3] < 0)
+          A[vs[(k + 1) % 3]] += At / 2.;
+        else
+          A[vs[(k + 1) % 3]] += At / 4.;
+      } else {
+        A[vs[k]] = A[vs[k]] + cot * lens[k] * lens[k] / 8;
+        A[vs[(k + 1) % 3]] = A[vs[(k + 1) % 3]] + cot * lens[k] * lens[k] / 8;
+      }
+
+      int i1 = vs[k];
+      int i2 = vs[(k + 1) % 3];
+
+      vneigh[i1][i1] -= cot;
+      vneigh[i2][i1] += cot;
+
+      vneigh[i2][i2] -= cot;
+      vneigh[i1][i2] += cot;
+    }
+  }
+
+  // Divide by 2*A[i]
+  for (int i = 0; i < nvert; i++) {
+    vertex_neigh_t::iterator b = vneigh[i].begin(), e = vneigh[i].end();
+    for (; b != e; b++) {
+      (*b).second /= (2.0 * A[i]);
+    }
+  }
+
+  // for(int i=0; i<nvert; i++)printf("A[%d] = %lf\n", i, A[i]);
+  return vneigh;
+}
+
+SparseMatrix convertToSparse(const std::vector<vertex_neigh_t>& neigh,
+                             const vector<int>& extra, double cwt) {
+
+  int m = neigh.size();
+  std::vector<std::vector<std::pair<int, double>>> cols(m);
+
+  for (int i = 0; i < m; i++) {
+    int hadi = 0;
+    for (vertex_neigh_t::const_iterator b = neigh[i].begin();
+         b != neigh[i].end(); b++) {
+      hadi |= (b->first == i);
+      cols[b->first].push_back(std::pair<int, double>(i, b->second));
+    }
+    if (!hadi)
+      cols[i].push_back(std::pair<int, double>(i, 0.0));
+  }
+
+  printf("adding extra %d\n", extra.size());
+
+  for (int i = 0; i < extra.size(); i++) {
+    cols[extra[i]].push_back(std::pair<int, double>(m + i, cwt));
+  }
+  printf("got sparse matrix\n");
+
+  return SparseMatrix(m + extra.size(), cols);
+}
+
+SparseMatrix constraintMatrix(int n, const std::vector<int>& indices,
+                              double cwt) {
+  std::vector<std::vector<std::pair<int, double>>> cols(n);
+
+  for (int i = 0; i < indices.size(); i++) {
+    cols[indices[i]].push_back(std::pair<int, double>(i, cwt));
+  }
+  return SparseMatrix(indices.size(), cols);
+}
+
 } // namespace
 
 nappear::Mesh CreateMeshFromImages(const nacb::Image8& lowres_image,
@@ -502,16 +625,60 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   mesh = RemoveDuplicates(mesh.vert, mesh.norm, tri, lowres_mask.w,
                           lowres_mask.h, 7);
 
-  // const bool small_image = lowres_image.w <= 8 || lowres_image.h <= 8;
+  std::vector<int> extra;
+  for (int i = 0; i < mesh.vert.size(); ++i) {
+    if (abs(mesh.vert[i].z) <= 0.5) {
+      extra.push_back(i);
+    }
+  }
+  auto original_vert = mesh.vert;
+
   SmoothMesh(&mesh);
   mesh.initNormals();
 
-  /*opts.alpha = small_image ? 0.07 : 0.185;
-  opts.ntime = small_image ? 10 : 20;
-  opts.alpha += 0.3;
-  opts.beta += 2;
-  */
-  return BlowUpMesh(mesh, opts);
+  const bool small_image = lowres_image.w <= 8 || lowres_image.h <= 8;
+  BlowUpOptions opts2;
+  opts2.alpha = small_image ? 0.07 : 0.185;
+  opts2.ntime = small_image ? 10 : 20;
+  opts2.alpha += 0.3;
+  opts2.beta += 2;
+
+  mesh = BlowUpMesh(mesh, opts2);
+
+  if (extra.size() > 0) {
+    Matrix xco(mesh.vert.size(), 1);
+    Matrix yco(mesh.vert.size(), 1);
+    Matrix zco(mesh.vert.size(), 1);
+
+    std::vector<vertex_neigh_t> neigh = mesh_laplacian(mesh.vert, mesh.faces);
+
+    for (int i = 0; i < mesh.vert.size(); i++) {
+      xco[i] = mesh.vert[i].x;
+      yco[i] = mesh.vert[i].y;
+      zco[i] = mesh.vert[i].z;
+    }
+    const double cwt = 0.5;
+    SparseMatrix mat = convertToSparse(neigh, extra, cwt);
+    Matrix lx(mat.m, 1), ly(mat.m, 1), lz(mat.m, 1);
+
+    lx = mat * xco;
+    ly = mat * yco;
+    lz = mat * zco;
+    for (int i = 0; i < extra.size(); i++) {
+      lx[i + mesh.vert.size()] = cwt * (original_vert[extra[i]].x);
+      ly[i + mesh.vert.size()] = cwt * (original_vert[extra[i]].y);
+      lz[i + mesh.vert.size()] = cwt * (original_vert[extra[i]].z);
+    }
+
+    Matrix xr = mat.linLeastSqQr(lx);
+    Matrix yr = mat.linLeastSqQr(ly);
+    Matrix zr = mat.linLeastSqQr(lz);
+
+    for (int i = 0; i < mesh.vert.size(); i++) {
+      mesh.vert[i] = Vec3f(xr[i], yr[i], zr[i]);
+    }
+  }
+  return mesh;
 }
 
 #ifdef MESH_UTILS_MAIN
