@@ -11,6 +11,7 @@ struct BlowUpOptions {
   double alpha = 0.1; // Controls blow-up of the mesh.
   double beta = 1.0;
   int ninner = 15; // Number of inner iterations (to reduce strain/stretch).
+  int constrain_boundary = 1;
 };
 
 // Creates a mesh from a lowres and highres image. If the highres image

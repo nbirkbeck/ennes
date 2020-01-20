@@ -12,13 +12,11 @@ struct BackgroundGroup {
 
   nacb::Image8 ExtractImage(const nacb::Image8& image,
                             const std::map<int, int>& line_starts) const {
-    int x0 = line_starts.lower_bound(8 * min_y)->second;
-    int w = (max_x + 1 - min_x) * 8;
-    int h = (max_y + 1 - min_y) * 8;
+    const int x0 = line_starts.lower_bound(8 * min_y)->second;
+    const int w = (max_x + 1 - min_x) * 8;
+    const int h = (max_y + 1 - min_y) * 8;
     const int x1 = (x0 + min_x * 8) + w;
     const int y1 = min_y * 8 + h;
-    assert(x1 <= image.w);
-    assert(y1 <= image.h);
     return image.subimage(x0 + min_x * 8, min_y * 8, (max_x + 1 - min_x) * 8,
                           (max_y + 1 - min_y) * 8);
   }

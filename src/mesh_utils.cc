@@ -637,15 +637,15 @@ nappear::Mesh CreateMeshFromImages3D(const nacb::Image8& lowres_image,
   mesh.initNormals();
 
   const bool small_image = lowres_image.w <= 8 || lowres_image.h <= 8;
-  BlowUpOptions opts2;
+  BlowUpOptions opts2 = opts;
   opts2.alpha = small_image ? 0.07 : 0.185;
   opts2.ntime = small_image ? 10 : 20;
   opts2.alpha += 0.3;
   opts2.beta += 2;
-
+ 
   mesh = BlowUpMesh(mesh, opts2);
 
-  if (extra.size() > 0) {
+  if (extra.size() > 0 && opts2.constrain_boundary) {
     Matrix xco(mesh.vert.size(), 1);
     Matrix yco(mesh.vert.size(), 1);
     Matrix zco(mesh.vert.size(), 1);
@@ -689,7 +689,6 @@ int main(int ac, char* av[]) {
       output_mesh_path = "/tmp/mesh_utils.obj";
 
   BlowUpOptions opts;
-
   nacb::CommandLine cline;
   cline.registerOption("lowres_path", "Low res image", &lowres_path);
   cline.registerOption("highres_path", "Highres image", &highres_path);
@@ -704,6 +703,9 @@ int main(int ac, char* av[]) {
   cline.registerOption("beta",
                        "(Blow-up) parameter, highers means preserve structure",
                        &opts.beta);
+  cline.registerOption("constrain_boundary",
+                       "Constrain the boundary",
+                       &opts.constrain_boundary);
   cline.registerOption(
       "ninner", "(Blow-up) parameter, inner structure preserving iterations",
       &opts.ninner);
